@@ -2,7 +2,7 @@
 
 [![Launch the tool](https://img.shields.io/badge/%E2%96%B6%20LAUNCH%20THE%20TOOL-open%20in%20Chrome%20or%20Edge-2ea44f?style=for-the-badge)](https://sparks72.github.io/qmx-backup-restore/)
 
-### ▶ [Open it now: sparks72.github.io/qmx-backup-restore](https://sparks72.github.io/qmx-backup-restore/)
+### ▶ [Open it now: sparks72.github.io/qmx-backup-restore]([https://sparks72.github.io/qmx-backup-restore](https://sparks72.github.io/QMX-Backup-Restore-Firmware-Update/)
 
 A browser tool for the QRP Labs **QMX / QMX+**. It backs up every setting and restores it intelligently, and it can carry out the whole firmware update. There's nothing to install or download: click the link above in **Chrome or Edge** (Windows, Mac, Linux or ChromeOS), plug in your QMX, and click **Connect**.
 
