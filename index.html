@@ -1,0 +1,3515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QMX CAT Backup / Restore</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap');
+
+  :root {
+    --bg:        #0a0f0a;
+    --surface:   #0e160e;
+    --border:    #1a2e1a;
+    --glow:      #39ff14;
+    --dim:       #2a6b2a;
+    --muted:     #4a7a4a;
+    --text:      #c8f0c8;
+    --label:     #7ab87a;
+    --warn:      #f0c030;
+    --err:       #ff4444;
+    --ok:        #39ff14;
+    --font-mono: 'Share Tech Mono', 'Courier New', monospace;
+    --font-disp: 'Orbitron', sans-serif;
+  }
+
+  html[data-theme="light"] {
+    --bg:      #f4f7f4;
+    --surface: #ffffff;
+    --border:  #b8ccb8;
+    --glow:    #1a7a1a;
+    --dim:     #5a8a5a;
+    --muted:   #6a9a6a;
+    --text:    #1a2e1a;
+    --label:   #2a5a2a;
+    --warn:    #b07800;
+    --err:     #cc2222;
+    --ok:      #1a7a1a;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { overflow: auto; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px 12px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    background: var(--surface);
+    box-shadow: 0 0 18px rgba(57,255,20,0.06);
+  }
+  header h1 {
+    font-family: var(--font-disp);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--glow);
+    text-shadow: 0 0 12px rgba(57,255,20,0.5);
+  }
+  header .sub {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+  .badge {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* ── Layout ── */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  /* ── Panel shared ── */
+  .panel {
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .panel-title {
+    font-family: var(--font-disp);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--dim);
+    text-transform: uppercase;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Connection panel ── */
+  #conn-panel { grid-column: 1; grid-row: 1; }
+
+  .field-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .field-row label {
+    font-size: 10px;
+    color: var(--label);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  select, input[type=text] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 6px 8px;
+    border-radius: 2px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  select:focus, input[type=text]:focus {
+    border-color: var(--dim);
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--err);
+    margin-right: 6px;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .status-dot.connected {
+    background: var(--ok);
+    box-shadow: 0 0 6px var(--ok);
+  }
+  .status-dot.busy {
+    background: var(--warn);
+    box-shadow: 0 0 6px var(--warn);
+    animation: pulse 0.8s ease-in-out infinite alternate;
+  }
+  @keyframes pulse { from { opacity:1 } to { opacity:0.3 } }
+
+  #conn-status { font-size: 11px; color: var(--muted); }
+
+  /* ── Buttons ── */
+  .btn {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    padding: 8px 14px;
+    border: 1px solid var(--dim);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) {
+    background: rgba(57,255,20,0.07);
+    border-color: var(--glow);
+    color: var(--glow);
+    box-shadow: 0 0 8px rgba(57,255,20,0.15);
+  }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.primary {
+    border-color: var(--glow);
+    color: var(--glow);
+    background: rgba(57,255,20,0.05);
+  }
+  .btn.primary:hover:not(:disabled) {
+    background: rgba(57,255,20,0.15);
+    box-shadow: 0 0 14px rgba(57,255,20,0.25);
+  }
+  .btn.danger { border-color: var(--err); color: var(--err); }
+  .btn.danger:hover:not(:disabled) {
+    background: rgba(255,68,68,0.1);
+    box-shadow: 0 0 8px rgba(255,68,68,0.2);
+  }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ── Actions panel ── */
+  #action-panel { grid-column: 1; grid-row: 2; }
+  #action-panel .section-sep {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* ── Log / data panel ── */
+  #data-panel {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    border-right: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+  }
+
+  /* Tabs */
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 10px 20px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--glow); border-bottom-color: var(--glow); }
+
+  .tab-content { display: none; flex: 1; overflow: hidden; }
+  .tab-content.active { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Log */
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-size: 12px;
+    line-height: 1.7;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  #log::-webkit-scrollbar { width: 6px; }
+  #log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .log-line { display: flex; gap: 10px; }
+  .log-ts { color: var(--dim); flex-shrink: 0; }
+  .log-tx { color: var(--warn); }
+  .log-rx { color: var(--ok); }
+  .log-info { color: var(--label); }
+  .log-err { color: var(--err); }
+  .log-section {
+    color: var(--dim);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 6px 0 2px;
+    border-top: 1px solid var(--border);
+    padding-top: 6px;
+  }
+
+  /* Data view */
+  #data-view {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 12px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  #data-view::-webkit-scrollbar { width: 6px; }
+  #data-view::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .data-group {
+    margin-bottom: 20px;
+  }
+  .data-group-title {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table {
+    min-width: 100%;
+    width: max-content;
+    border-collapse: collapse;
+  }
+  .data-table td {
+    padding: 4px 8px;
+    vertical-align: top;
+  }
+  .data-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+  .data-table .key { color: var(--label); width: 220px; }
+  .data-table .val { color: var(--glow); }
+  .data-table .desc { color: var(--muted); font-size: 11px; }
+
+  /* Progress bar */
+  #progress-wrap {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    display: none;
+  }
+  #progress-wrap.visible { display: block; }
+  #progress-label {
+    font-size: 11px;
+    color: var(--label);
+    margin-bottom: 5px;
+  }
+  #progress-bar-bg {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  #progress-bar {
+    height: 100%;
+    background: var(--glow);
+    width: 0%;
+    transition: width 0.2s;
+    box-shadow: 0 0 8px var(--glow);
+  }
+
+  /* JSON textarea */
+  #json-area {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    border: none;
+    resize: none;
+    padding: 12px 16px;
+    outline: none;
+    line-height: 1.6;
+  }
+
+  /* Unavailable parameter styling */
+  .val-unavail { color: var(--dim); font-style: italic; }
+
+  /* Editable value cells (Data tab — "make values editable" feature) */
+  .val-edit {
+    font-family: 'Share Tech Mono', monospace;
+    background: var(--bg, #0a0f0a);
+    color: var(--glow);
+    border: 1px solid var(--border, #1a2e1a);
+    border-radius: 3px;
+    padding: 2px 5px;
+    font-size: 12px;
+    width: 100%;
+    min-width: 70px;
+    box-sizing: border-box;
+  }
+  .val-edit:focus { outline: none; border-color: var(--glow); }
+  .val-edit.edited { border-color: #f0c030; box-shadow: 0 0 6px rgba(240,192,48,0.35); color: #f0c030; }
+  .tag-unavail {
+    display: inline-block;
+    font-size: 9px;
+    padding: 1px 5px;
+    border: 1px solid var(--dim);
+    color: var(--dim);
+    border-radius: 2px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  /* Scanline overlay for ambience */
+  body::after {
+    content: '';
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.04) 2px,
+      rgba(0,0,0,0.04) 4px
+    );
+    z-index: 9999;
+  }
+
+  /* Notification toast */
+  #toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--surface);
+    border: 1px solid var(--glow);
+    color: var(--glow);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 10px 40px 10px 16px;
+    border-radius: 2px;
+    box-shadow: 0 0 16px rgba(57,255,20,0.2);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+    z-index: 10000;
+    max-width: 380px;
+    line-height: 1.5;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  #toast.sticky { pointer-events: auto; cursor: default; }
+  #toast.err { border-color: var(--err); color: var(--err); box-shadow: 0 0 16px rgba(255,68,68,0.2); }
+  #toast-close {
+    position: absolute;
+    top: 6px; right: 8px;
+    font-size: 14px;
+    color: var(--dim);
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 4px;
+    transition: color 0.15s;
+  }
+  #toast-close:hover { color: var(--glow); }
+
+  /* Loading overlay */
+  #loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10,15,10,0.88);
+    z-index: 10002;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #loading-overlay.visible { display: flex; }
+  #loading-msg {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--glow);
+    letter-spacing: 0.1em;
+  }
+  #loading-spinner {
+    width: 36px; height: 36px;
+    border: 2px solid var(--border);
+    border-top-color: var(--glow);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    box-shadow: 0 0 12px rgba(57,255,20,0.3);
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* No Web Serial warning */
+  #no-serial {
+    display: none;
+    background: rgba(255,68,68,0.1);
+    border: 1px solid var(--err);
+    color: var(--err);
+    padding: 12px;
+    font-size: 12px;
+    border-radius: 2px;
+    line-height: 1.6;
+  }
+
+  /* Band config table */
+  .band-table { border-collapse: collapse; width: 100%; font-size: 11px; }
+  .band-table th {
+    color: var(--dim);
+    font-weight: normal;
+    text-align: left;
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .band-table td {
+    color: var(--glow);
+    padding: 3px 6px;
+    white-space: nowrap;
+  }
+  .band-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+  .band-table .row-label { color: var(--label); }
+
+  /* ── Firmware update dialog ── */
+
+  /* V31: on/off switch for "Ask before each step" */
+  .fw-switch { display: inline-flex; align-items: center; gap: 12px; cursor: pointer; font-size: 15px; padding: 6px 0; user-select: none; }
+  .fw-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .fw-switch .track { position: relative; width: 56px; height: 30px; border-radius: 15px; border: 2px solid var(--text); background: var(--bg); transition: background .15s, border-color .15s; flex: none; }
+  .fw-switch .knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--text); transition: left .15s, background .15s; }
+  .fw-switch input:checked + .track { background: var(--glow); border-color: var(--glow); }
+  .fw-switch input:checked + .track .knob { left: 29px; background: var(--surface); }
+  .fw-switch input:focus-visible + .track { outline: 2px solid var(--warn); outline-offset: 2px; }
+  .fw-switch .state { font-weight: bold; min-width: 2.6em; color: var(--text); }
+  .fw-switch .state::after { content: 'OFF'; }
+  .fw-switch input:checked ~ .state { color: var(--glow); }
+  .fw-switch input:checked ~ .state::after { content: 'ON'; }
+  #fw-modal {
+    display: none; position: fixed; inset: 0; z-index: 10001;
+    background: rgba(0,0,0,0.6); align-items: center; justify-content: center; padding: 16px;
+  }
+  #fw-modal.visible { display: flex; }
+  #fw-box {
+    background: var(--surface); border: 1px solid var(--glow); border-radius: 4px;
+    width: min(640px, 100%); max-height: calc(92vh / var(--zoom, 1)); overflow: auto; padding: 18px 20px;
+    box-shadow: 0 0 24px rgba(57,255,20,0.15);
+  }
+  #fw-box h2 {
+    font-family: var(--font-disp); font-size: 14px; letter-spacing: 0.1em; color: var(--glow);
+    margin-bottom: 10px; display: flex; align-items: center;
+  }
+  #fw-box h2 .x { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 16px; }
+  .fw-step { border-top: 1px solid var(--border); padding: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+  .fw-step .n { color: var(--label); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .fw-step p, .fw-step li { font-size: 12px; line-height: 1.55; color: var(--text); }
+  .fw-step ol { padding-left: 20px; }
+  .fw-info { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .fw-info b { color: var(--glow); font-weight: normal; }
+  .fw-warn { color: var(--warn); font-size: 12px; line-height: 1.5; }
+  .fw-err  { color: var(--err);  font-size: 12px; line-height: 1.5; }
+  #fw-entry { background: var(--bg); color: var(--text); border: 1px solid var(--border); font-family: var(--font-mono); padding: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>QMX</h1>
+  <span class="sub">CAT Backup / Restore &nbsp;·&nbsp; V33 Smart Restore + Firmware Update &nbsp;·&nbsp; fw 1.03 / 1.04_004 (GP·SR·BN·grid·HW-guard)</span>
+  <span class="badge">G4ADF / DJ0CU</span>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+    <button id="btn-font-down" title="Decrease font size" style="background:none;border:1px solid var(--dim);color:var(--label);width:28px;height:26px;border-radius:4px;cursor:pointer;font-size:14px;line-height:1">A−</button>
+    <span id="font-size-val" style="font-size:11px;color:var(--muted);min-width:28px;text-align:center">13px</span>
+    <button id="btn-font-up" title="Increase font size" style="background:none;border:1px solid var(--dim);color:var(--label);width:28px;height:26px;border-radius:4px;cursor:pointer;font-size:14px;line-height:1">A+</button>
+    <button id="btn-theme" title="Toggle light/dark mode" style="background:none;border:1px solid var(--dim);color:var(--label);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:13px;margin-left:8px">☀ Light</button>
+  </div>
+</header>
+
+<main>
+  <!-- ── Left column ── -->
+  <div class="panel" id="conn-panel">
+    <div class="panel-title">Serial Connection</div>
+
+    <div id="no-serial">
+      ⚠ Web Serial API not available.<br>
+      Use Chrome or Edge (desktop) and serve over https:// or localhost.
+    </div>
+
+    <div class="field-row">
+      <label>Baud Rate</label>
+      <select id="baud">
+        <option value="115200" selected>115200</option>
+        <option value="57600">57600</option>
+        <option value="38400">38400</option>
+        <option value="19200">19200</option>
+        <option value="9600">9600</option>
+      </select>
+    </div>
+
+    <div class="field-row">
+      <label>Inter-command delay (ms)</label>
+      <select id="cmd-delay">
+        <option value="0" selected>0 ms (recommended)</option>
+        <option value="5">5 ms</option>
+        <option value="20">20 ms (cautious)</option>
+        <option value="50">50 ms (slow link)</option>
+      </select>
+    </div>
+
+    <div id="conn-status">
+      <span class="status-dot" id="dot"></span>
+      <span id="conn-text">Not connected</span>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn primary" id="btn-connect">Connect</button>
+      <button class="btn danger" id="btn-disconnect" disabled>Disconnect</button>
+    </div>
+    <button class="btn" id="btn-force-cat" disabled title="Send EXIT to QMX terminal, then probe CAT">⟳ Re-probe / Force CAT mode</button>
+    <button class="btn" id="btn-swr-reset" disabled title="SR0; resets a triggered SWR protection lock (fw 1_04_004+)">⚡ Reset SWR protection</button>
+  </div>
+
+  <div class="panel" id="action-panel">
+    <div class="panel-title">Operations</div>
+
+    <div class="section-sep">Read</div>
+    <button class="btn primary" id="btn-backup" disabled>⟳ Read All Parameters</button>
+
+    <div class="section-sep">Restore</div>
+    <button class="btn" id="btn-restore-file" disabled>▲ Restore from File…</button>
+    <input type="file" id="file-input" accept=".json" style="display:none">
+
+    <div class="section-sep">Edit</div>
+    <button class="btn danger" id="btn-write-edits" disabled title="Writes ONLY the cells you've changed on the Data tab — no scan, no diff">✎ Write Edited Values (<span id="edit-count">0</span>)</button>
+
+    <div class="section-sep">File</div>
+    <button class="btn" id="btn-save" disabled>💾 Save Backup as JSON</button>
+    <button class="btn" id="btn-load-view">📂 Load JSON to View</button>
+
+    <div class="section-sep">Firmware</div>
+    <button class="btn" id="btn-fw" title="Load new QMX firmware (copies the file onto the QMX USB drive in firmware update mode)">⬆ Update Firmware…</button>
+
+    <div class="section-sep">Manual</div>
+    <div class="field-row">
+      <label>Send CAT command</label>
+      <input type="text" id="manual-cmd" placeholder="e.g. FA;  GP;  SR;  BN;" autocomplete="off" autocorrect="off" spellcheck="false">
+    </div>
+    <button class="btn" id="btn-send" disabled>Send</button>
+  </div>
+
+  <!-- ── Right column ── -->
+  <div id="data-panel">
+    <div class="tab-bar">
+      <div class="tab active" data-tab="log">Activity Log</div>
+      <div class="tab" data-tab="data">Saved Parameters</div>
+      <div class="tab" data-tab="json">JSON</div>
+    </div>
+
+    <div class="tab-content active" id="tab-log">
+      <div id="log"></div>
+    </div>
+
+    <div class="tab-content" id="tab-data">
+      <div style="padding:8px 12px 0;flex-shrink:0">
+        <input id="param-search" type="search" placeholder="Filter parameters…"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:var(--font-mono);font-size:12px;outline:none">
+      </div>
+      <div id="data-view"><em style="color:var(--muted)">No data — run a backup or load a file.</em></div>
+    </div>
+
+    <div class="tab-content" id="tab-json">
+      <textarea id="json-area" readonly placeholder="JSON will appear here after backup or load."></textarea>
+    </div>
+
+    <div id="progress-wrap">
+      <div id="progress-label">Backing up…</div>
+      <div id="progress-bar-bg"><div id="progress-bar"></div></div>
+    </div>
+  </div>
+</main>
+
+<div id="fw-modal">
+  <div id="fw-box">
+    <h2>Firmware Update <span class="x" id="fw-close" title="Close">✕</span></h2>
+    <div class="fw-step">
+      <label class="fw-switch"><input type="checkbox" id="fw-ask" checked><span class="track"><span class="knob"></span></span><span class="state"></span><b>Ask before each step</b></label>
+      <p class="fw-info" id="fw-ask-info"></p>
+      <div id="fw-count" style="display:none;margin-top:12px;padding:14px 16px;border:2px solid var(--glow);border-radius:6px;background:var(--bg);align-items:center;gap:16px">
+        <div id="fw-count-num" style="font-size:44px;font-weight:bold;line-height:1;min-width:1.6em;text-align:center;color:var(--glow)">5</div>
+        <div style="flex:1">
+          <div id="fw-count-what" style="font-size:15px;line-height:1.4"></div>
+          <div class="fw-info" style="margin-top:4px">seconds until the update starts</div>
+        </div>
+        <button class="btn" id="fw-count-stop" style="font-size:16px;padding:10px 22px;border-width:2px">✋ STOP</button>
+      </div>
+      <div id="fw-go-prog" style="display:none;margin-top:10px">
+        <div style="height:10px;border:1px solid var(--glow);border-radius:5px;overflow:hidden;background:var(--bg)">
+          <div id="fw-go-bar" style="height:100%;width:0%;background:var(--glow);transition:width .2s"></div>
+        </div>
+        <div class="fw-info" id="fw-go-label" style="margin-top:4px"></div>
+      </div>
+    </div>
+
+    <div class="fw-step">
+      <div class="n">1 · Back up first</div>
+      <div class="fw-info" id="fw-backup-state">—</div>
+      <p>A firmware update can reset settings. Use <b style="color:var(--glow);font-weight:normal">Read All Parameters</b> and <b style="color:var(--glow);font-weight:normal">Save Backup as JSON</b> before you continue.</p>
+    </div>
+
+    <div class="fw-step">
+      <div class="n">2 · Choose the firmware file</div>
+      <p>Download the firmware from QRP Labs. Choose the .zip as downloaded, or the file already unzipped.</p>
+      <div class="btn-row">
+        <button class="btn primary" id="fw-pick">📂 Choose firmware file…</button>
+        <input type="file" id="fw-file" style="display:none">
+      </div>
+      <div id="fw-entry-row" style="display:none" class="fw-info">File inside zip: <select id="fw-entry"></select></div>
+      <div class="fw-info" id="fw-file-info">No file chosen.</div>
+      <div class="btn-row" id="fw-go-row" style="display:none">
+        <button class="btn" id="fw-go-stop">✋ Stop</button>
+      </div>
+      <div class="fw-info" id="fw-go-state"></div>
+    </div>
+
+    <div class="fw-step">
+      <div class="n">3 · Put the QMX into firmware update mode</div>
+      <p><b>Automatic, via the terminal menu:</b> the tool opens the QMX terminal menu, reads each screen and moves the highlight by name: Main menu → <b>System</b> → <b>Update firmware</b>. It doesn't count key presses, so a remembered menu position or a reshuffled menu can't send it to the wrong item. It never presses Enter on anything containing "factory" or "reset", and it asks you before the last Enter. Click Cancel at that point for a test run: the tool backs out and leaves the terminal.</p>
+      <div class="btn-row">
+        <button class="btn primary" id="fw-term">⚡ Enter update mode via terminal menu</button>
+        <button class="btn" id="fw-term-cancel" style="display:none">Stop</button>
+        <button class="btn" id="fw-term-save" disabled title="Save what the QMX terminal sent, to check or share if something didn't work">💾 Save terminal capture</button>
+      </div>
+      <div class="fw-info" id="fw-term-state"></div>
+      <p><b>Automatic via CAT (experimental, V24):</b> the tool looks for the "Update firmware" item in the CAT menu tree and starts it with an MM command.</p>
+      <div class="btn-row">
+        <button class="btn" id="fw-auto">⚡ Enter update mode via CAT</button>
+        <button class="btn" id="fw-auto-cancel" style="display:none">Stop waiting</button>
+      </div>
+      <div class="fw-info" id="fw-auto-state"></div>
+      <p><b>Manual (always works):</b></p>
+      <ol>
+        <li>Click <b>Release serial port</b> below, because the radio drops its serial port when it reboots.</li>
+        <li>On the QMX, select the <b>Update firmware</b> menu item. At "Sure? Click Tune", press the TUNE knob (manual section 5.20).</li>
+        <li>The QMX reboots and shows up on the PC as a USB flash drive. If it doesn't, switch the QMX off and on.</li>
+      </ol>
+      <div class="btn-row"><button class="btn" id="fw-release">⏏ Release serial port</button></div>
+    </div>
+
+    <div class="fw-step">
+      <div class="n">4 · Copy the firmware onto the QMX drive</div>
+      <p><b>If the QMX drive doesn't appear on the PC, switch the QMX off and on</b> — on some radios the drive only shows up after a restart.</p>
+      <p>Click <b>Write to QMX drive…</b> and pick the QMX USB drive in the folder dialog. Chrome asks once for write permission.</p>
+      <div class="btn-row">
+        <button class="btn danger" id="fw-write" disabled>⬆ Write to QMX drive…</button>
+        <button class="btn" id="fw-download" disabled title="Save the (unzipped) firmware file so you can copy it onto the QMX drive by hand">⬇ Save file for manual copy</button>
+      </div>
+      <div class="fw-info" id="fw-write-state"></div>
+      <p class="fw-info">If the browser won't write to the drive, save the file and copy it onto the QMX drive with Explorer or Finder. This is the method the QRP Labs manual describes.</p>
+    </div>
+
+    <div class="fw-step">
+      <div class="n">5 · Afterwards</div>
+      <p>The QMX should restart with the new firmware. Click <b>Connect</b> again: the log shows the new firmware version. If settings were reset, use <b>Restore from File…</b> with your backup.</p>
+    </div>
+  </div>
+</div>
+
+<div id="toast"><span id="toast-close" title="Dismiss">✕</span></div>
+<div id="loading-overlay"><div id="loading-spinner"></div><div id="loading-msg">Loading…</div></div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   QMX CAT Backup / Restore
+   Web Serial API — Chrome/Edge only
+   115200 8N1, semicolon-terminated commands
+   ═══════════════════════════════════════════════════ */
+
+'use strict';
+
+// ── State ──
+let port = null;
+let reader = null;
+let writer = null;
+let rxBuf = '';
+let rxResolve = null;
+let rxReject = null;
+let rxTimer = null;
+let savedData = null;
+let busy = false;
+
+// ── DOM refs ──
+const dot          = document.getElementById('dot');
+const connText     = document.getElementById('conn-text');
+const btnConnect   = document.getElementById('btn-connect');
+const btnDisconnect= document.getElementById('btn-disconnect');
+const btnBackup    = document.getElementById('btn-backup');
+const btnRestoreFile = document.getElementById('btn-restore-file');
+const fileInput    = document.getElementById('file-input');
+const btnSave      = document.getElementById('btn-save');
+const btnWriteEdits = document.getElementById('btn-write-edits');
+const editCountEl   = document.getElementById('edit-count');
+let radioConnected = false;
+const btnLoadView  = document.getElementById('btn-load-view');
+const manualCmd    = document.getElementById('manual-cmd');
+const btnSend      = document.getElementById('btn-send');
+const logEl        = document.getElementById('log');
+const dataView     = document.getElementById('data-view');
+const jsonArea     = document.getElementById('json-area');
+const progressWrap = document.getElementById('progress-wrap');
+const progressBar  = document.getElementById('progress-bar');
+const progressLabel= document.getElementById('progress-label');
+const noSerial     = document.getElementById('no-serial');
+const baudSel      = document.getElementById('baud');
+const cmdDelayEl   = document.getElementById('cmd-delay');
+
+// Live inter-command delay (ms) — read before each operation
+function getCmdDelay() { return parseInt(cmdDelayEl?.value ?? 20); }
+
+// ── Web Serial check ──
+if (!('serial' in navigator)) {
+  noSerial.style.display = 'block';
+  btnConnect.disabled = true;
+}
+
+// ── Tabs ──
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Logging ──
+function ts() {
+  const n = new Date();
+  return n.toTimeString().slice(0,8);
+}
+function log(msg, cls = 'log-info') {
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-ts">${ts()}</span><span class="${cls}">${escHtml(msg)}</span>`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function logSection(msg) {
+  const line = document.createElement('div');
+  line.className = 'log-section';
+  line.textContent = '── ' + msg + ' ──';
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function logTx(cmd) { log('TX  ' + cmd, 'log-tx'); }
+function logRx(resp) { log('RX  ' + resp, 'log-rx'); }
+function logErr(msg) { log('ERR ' + msg, 'log-err'); }
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+
+// ── Toast ──
+let toastTimer = null;
+
+// sticky=true: stays until clicked. sticky=false: auto-dismisses after 4s.
+function toast(msg, err = false, sticky = false) {
+  const el = document.getElementById('toast');
+  const closeBtn = document.getElementById('toast-close');
+  // Set message, preserving close button
+  closeBtn.style.display = sticky ? 'block' : 'none';
+  // Use a text node so close btn stays as a child
+  // Remove old text nodes
+  [...el.childNodes].forEach(n => { if (n.nodeType === Node.TEXT_NODE) n.remove(); });
+  el.insertBefore(document.createTextNode(msg), closeBtn);
+  el.className = 'show' + (err ? ' err' : '') + (sticky ? ' sticky' : '');
+  if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+  if (!sticky) {
+    toastTimer = setTimeout(() => { el.className = ''; }, 4000);
+  }
+}
+
+function dismissToast() {
+  const el = document.getElementById('toast');
+  el.className = '';
+  if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+}
+
+document.getElementById('toast-close').addEventListener('click', dismissToast);
+
+// ── Light / dark theme toggle ────────────────────────────────────────────────
+const btnTheme = document.getElementById('btn-theme');
+(function(){
+  const saved = localStorage.getItem('qmx-theme');
+  if(saved === 'light'){ document.documentElement.dataset.theme='light'; btnTheme.textContent='🌙 Dark'; }
+})();
+btnTheme.addEventListener('click', () => {
+  const isLight = document.documentElement.dataset.theme === 'light';
+  if(isLight){
+    delete document.documentElement.dataset.theme;
+    btnTheme.textContent = '☀ Light';
+    localStorage.setItem('qmx-theme','dark');
+  } else {
+    document.documentElement.dataset.theme = 'light';
+    btnTheme.textContent = '🌙 Dark';
+    localStorage.setItem('qmx-theme','light');
+  }
+});
+
+// ── Font size control ────────────────────────────────────────────────────────
+const fontSizeVal = document.getElementById('font-size-val');
+let fontSize = parseInt(localStorage.getItem('qmx-fontsize') || '13');
+function applyFontSize(){
+  document.body.style.zoom = fontSize / 13;
+  document.documentElement.style.setProperty('--zoom', fontSize / 13);   // V30: keeps pop-up windows inside the screen
+  fontSizeVal.textContent = fontSize + 'px';
+  localStorage.setItem('qmx-fontsize', fontSize);
+}
+applyFontSize();
+document.getElementById('btn-font-up').addEventListener('click', () => {
+  if(fontSize < 24){ fontSize++; applyFontSize(); }
+});
+document.getElementById('btn-font-down').addEventListener('click', () => {
+  if(fontSize > 9){ fontSize--; applyFontSize(); }
+});
+
+// ── Parameter search / filter ────────────────────────────────────────────────
+document.getElementById('param-search').addEventListener('input', function(){
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('#data-view .data-table tr').forEach(row => {
+    row.style.display = (!q || row.textContent.toLowerCase().includes(q)) ? '' : 'none';
+  });
+});
+
+// Loading overlay
+let loadingShownAt = 0;
+const LOADING_MIN_MS = 700;  // minimum display time so user can see it
+
+function showLoading(msg = 'Loading…') {
+  document.getElementById('loading-msg').textContent = msg;
+  document.getElementById('loading-overlay').classList.add('visible');
+  loadingShownAt = Date.now();
+}
+async function hideLoading() {
+  const elapsed = Date.now() - loadingShownAt;
+  const remaining = LOADING_MIN_MS - elapsed;
+  if (remaining > 0) await delay(remaining);
+  document.getElementById('loading-overlay').classList.remove('visible');
+}
+
+// ── Progress ──
+function setProgress(pct, label) {
+  progressWrap.classList.add('visible');
+  progressBar.style.width = pct + '%';
+  progressLabel.textContent = label;
+  if (typeof fwGoProgress === 'function') fwGoProgress(pct, label);   // V32: also show it in the Firmware Update window
+}
+function hideProgress() {
+  progressWrap.classList.remove('visible');
+  progressBar.style.width = '0%';
+}
+
+// ── Connection ──
+function setConnected(state) {
+  dot.className = 'status-dot' + (state === 'connected' ? ' connected' : state === 'busy' ? ' busy' : '');
+  connText.textContent = state === 'connected' ? 'Connected' : state === 'busy' ? 'Busy…' : 'Not connected';
+  btnConnect.disabled    = state !== 'disconnected';
+  btnDisconnect.disabled = state === 'disconnected';
+  btnBackup.disabled     = state !== 'connected';
+  btnRestoreFile.disabled= state !== 'connected';
+  btnSend.disabled       = state !== 'connected';
+  radioConnected = (state === 'connected');
+  updateEditCount();
+  updateForceCATBtn?.();
+  updateSwrResetBtn?.();
+}
+
+// ── Force CAT mode button ──
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('btn-force-cat').addEventListener('click', async () => {
+    if (!port) return;
+    log('Forcing CAT mode…');
+    await exitTerminalMode();
+    await drainRx(200);
+    const p = await catProbe();
+    if (p === 'ok') { toast('CAT mode confirmed'); log('CAT mode OK'); }
+    else if (p === 'terminal') { toast('Still in terminal mode — try again or power-cycle', true); logErr('Still in terminal mode'); }
+    else { log('No response — port may need reconnect', 'log-info'); }
+  });
+});
+
+btnConnect.addEventListener('click', async () => {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({
+      baudRate: parseInt(baudSel.value),
+      dataBits: 8,
+      stopBits: 1,
+      parity: 'none',
+      flowControl: 'none'
+    });
+    startReader();
+    log('Port opened at ' + baudSel.value + ' baud — probing CAT mode…');
+
+    // ── CAT mode detection & recovery ──
+    // Drain any startup chatter (terminal splash screen etc.) for 400ms
+    await drainRx(100);
+
+    // Probe: send ID; and check response
+    const probe = await catProbe();
+    if (probe === 'ok') {
+      setConnected('connected');
+      log('CAT mode confirmed — ready');
+      await readRadioIdent();
+    } else if (probe === 'terminal') {
+      log('Terminal mode detected — sending EXIT to switch to CAT…', 'log-info');
+      await exitTerminalMode();
+      await drainRx(200);
+      const probe2 = await catProbe();
+      if (probe2 === 'ok') {
+        setConnected('connected');
+        log('CAT mode confirmed after EXIT — ready');
+        await readRadioIdent();
+      } else {
+        logErr('Could not establish CAT mode. Try disconnecting and reconnecting.');
+        toast('CAT mode failed — try reconnecting', true);
+      }
+    } else {
+      // No response at all — still mark connected, user can try manually
+      log('No response to ID probe — port open, CAT status unknown', 'log-info');
+      setConnected('connected');
+    }
+  } catch(e) {
+    logErr('Connect failed: ' + e.message);
+    toast('Connection failed', true);
+  }
+});
+
+// ── Enable force-CAT button when connected ──
+function updateForceCATBtn() {
+  const btn = document.getElementById('btn-force-cat');
+  if (btn) btn.disabled = !port;
+}
+
+// ── Radio identity (firmware, model, chip unique ID, band, SWR lock, GPS) ──
+// UI;/BN; require firmware 1_04_003+ · SR;/GP; require 1_04_004+
+// All are optional and silently absent on older firmware.
+let radioIdent = { fw: null, model: null, chipId: null, band: null, swrLock: null, gps: null };
+
+// Parse GP response body. CAT manual (1_04_004) documents "+DD.DDDDDD+DDD.DDDDDD+YYYYMMDDHHMMSS"
+// but the actual on-air format (confirmed QMX+ fw 1_04_004, 25-Jul-2026) is fixed-point
+// integers with 6 implied decimals and NO decimal points, e.g.:
+//   "+54419067-011209412+20061209080457"  →  54.419067°N, 11.209412°E
+// Quirks handled here:
+//  * SIGN: longitude EAST is sent NEGATIVE (the manual says so and the radio really does it),
+//    so we negate longitude to conventional east-positive. Latitude is standard (N positive).
+//  * DATE: the GPS date arrives 1024 weeks (7168 days) in the past — classic GPS
+//    week-number rollover. Corrected below; time-of-day is accurate.
+//  * Both fixed-point and (documented) decimal-point formats are accepted.
+function parseGP(body) {
+  const m = /^([+-])(\d+(?:\.\d+)?)([+-])(\d+(?:\.\d+)?)([+-]?)(\d{14})$/.exec((body || '').trim());
+  if (!m) return null;
+  const toDeg = s => s.includes('.') ? parseFloat(s) : parseInt(s, 10) / 1e6;
+  const lat    = (m[1] === '-' ? -1 : 1) * toDeg(m[2]);
+  const lonRaw = (m[3] === '-' ? -1 : 1) * toDeg(m[4]);
+  const lon    = -lonRaw;   // QMX convention: east negative → flip to conventional east-positive
+  const dtRaw  = m[6];
+
+  // Build UTC date, then correct GPS week-number rollover (add 1024 weeks while
+  // the date is implausibly old — more than 512 weeks behind the local clock).
+  let d = new Date(Date.UTC(+dtRaw.slice(0,4), +dtRaw.slice(4,6) - 1, +dtRaw.slice(6,8),
+                            +dtRaw.slice(8,10), +dtRaw.slice(10,12), +dtRaw.slice(12,14)));
+  let wnro = false;
+  const HALF = 512 * 7 * 86400e3, FULL = 1024 * 7 * 86400e3;
+  while (isFinite(d.getTime()) && (Date.now() - d.getTime()) > HALF) {
+    d = new Date(d.getTime() + FULL); wnro = true;
+  }
+  const p2 = n => String(n).padStart(2, '0');
+  const noFix = (lat === 0 && lonRaw === 0 && /^0{14}$/.test(dtRaw));
+  return {
+    lat, lon,
+    noFix, wnro,
+    grid: maidenhead(lat, lon),
+    date: `${d.getUTCFullYear()}-${p2(d.getUTCMonth()+1)}-${p2(d.getUTCDate())}`,
+    time: `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}`,
+    rawDate: `${dtRaw.slice(0,4)}-${dtRaw.slice(4,6)}-${dtRaw.slice(6,8)}`,
+    raw: body
+  };
+}
+
+// 6-character Maidenhead grid locator from decimal degrees (standard convention: E+/N+)
+function maidenhead(lat, lon) {
+  if (!isFinite(lat) || !isFinite(lon)) return '';
+  let x = lon + 180, y = lat + 90;
+  const A = 'A'.charCodeAt(0);
+  const field  = String.fromCharCode(A + Math.floor(x / 20)) + String.fromCharCode(A + Math.floor(y / 10));
+  const square = String(Math.floor((x % 20) / 2)) + String(Math.floor(y % 10));
+  const sub    = String.fromCharCode(A + 32 + Math.floor((x % 2) * 12)) +
+                 String.fromCharCode(A + 32 + Math.floor((y % 1) * 24));
+  return field + square + sub;
+}
+
+async function readRadioIdent() {
+  radioIdent = { fw: null, model: null, chipId: null, band: null, swrLock: null, gps: null };
+  try { const r = await cat('VN;'); radioIdent.fw    = r.startsWith('VN') ? r.slice(2) : r; } catch(e) {}
+  try { const r = await cat('OM;'); radioIdent.model = r.startsWith('OM') ? r.slice(2) : r; } catch(e) {}
+  try { const r = await cat('UI;'); radioIdent.chipId= r.startsWith('UI') ? r.slice(2) : r; } catch(e) {}
+  try { const r = await cat('BN;'); const b = r.startsWith('BN') ? r.slice(2) : r;
+        if (b !== '') radioIdent.band = b; } catch(e) {}
+  try { const r = await cat('SR;'); const s = r.startsWith('SR') ? r.slice(2) : r;
+        if (s === '0' || s === '1') radioIdent.swrLock = (s === '1'); } catch(e) {}
+
+  // ── GPS position (GP; — fw 1_04_004+) with explicit diagnostics ──
+  // Previously any failure here was silent; now every outcome is logged.
+  let gpStatus = null;   // 'unsupported' | 'noresp' | 'unparsed' | 'nofix' | 'fix'
+  let gpRaw = '';
+  try {
+    const r = await cat('GP;', true, 400);   // give the GPS query a little more headroom
+    gpRaw = r;
+    if (r === '') {
+      gpStatus = 'noresp';
+    } else {
+      const body = r.startsWith('GP') ? r.slice(2) : r;
+      if (body === '') {
+        gpStatus = 'empty';
+      } else {
+        radioIdent.gps = parseGP(body);
+        if (!radioIdent.gps)            gpStatus = 'unparsed';
+        else if (radioIdent.gps.noFix)  { gpStatus = 'nofix'; radioIdent.gps = null; }
+        else                            gpStatus = 'fix';
+      }
+    }
+  } catch(e) {
+    gpStatus = 'unsupported';   // QMX replied ?; — command not in this firmware
+  }
+
+  const bits = [];
+  if (radioIdent.model)         bits.push(`Model ${radioIdent.model}`);
+  if (radioIdent.fw)            bits.push(`fw ${radioIdent.fw}`);
+  if (radioIdent.chipId)        bits.push(`chip ${radioIdent.chipId}`);
+  if (radioIdent.band !== null) bits.push(`band index ${radioIdent.band}`);
+  if (bits.length) {
+    log('Radio identity: ' + bits.join('  ·  '), 'log-info');
+    connText.textContent = 'Connected — ' + (radioIdent.fw || radioIdent.model || '');
+    connText.title = radioIdent.chipId ? `Chip ID: ${radioIdent.chipId}` : '';
+  }
+
+  switch (gpStatus) {
+    case 'fix': {
+      const g = radioIdent.gps;
+      log(`GPS fix: ${g.lat}, ${g.lon}  ·  grid ${g.grid}  ·  ${g.date} ${g.time} UTC${g.wnro ? ' (date corrected for GPS week rollover)' : ''}`, 'log-info');
+      connText.textContent += `  ·  ${g.grid}`;
+      connText.title = (connText.title ? connText.title + '\n' : '') +
+        `GPS: ${g.lat}, ${g.lon} (${g.grid}) at ${g.date} ${g.time} UTC`;
+      break;
+    }
+    case 'nofix':
+      log('GPS: receiver responding but no position fix yet (all-zero GP; reply) — check antenna sky view and wait for satellite lock', 'log-info');
+      break;
+    case 'empty':
+      log('GPS: no position from the radio — either no GPS module is connected, it has no fix yet, or the GPS Viewer screen is open on the LCD. Not a problem; retry later with GP; in the manual command box.', 'log-info');
+      break;
+    case 'unparsed':
+      log(`GPS: GP; replied but format not recognised — raw reply: "${gpRaw}" (please report this string)`, 'log-err');
+      break;
+    case 'noresp':
+      log('GPS: no reply to GP; — GPS not attached/enabled, or no data yet. On QMX+ check System config → GPS Source (QLG3 vs paddle).', 'log-info');
+      break;
+    case 'unsupported':
+      log(`GPS: GP; not supported by this firmware (${radioIdent.fw || 'unknown'}) — GPS position via CAT needs firmware 1_04_004 or later`, 'log-info');
+      break;
+  }
+  if (radioIdent.swrLock === true) {
+    log('⚠ SWR protection is TRIGGERED — transmit is locked. Use "Reset SWR protection" to clear (SR0;).', 'log-err');
+    toast('SWR protection triggered — TX locked!', true);
+  } else if (radioIdent.swrLock === false) {
+    log('SWR protection: not triggered', 'log-info');
+  }
+  if (!radioIdent.chipId) log('UI;/BN; not supported (needs fw 1_04_003+); SR;/GP; need 1_04_004+', 'log-info');
+  updateSwrResetBtn();
+}
+
+// ── SWR protection reset (SR0;) — fw 1_04_004+ ──
+function updateSwrResetBtn() {
+  const btn = document.getElementById('btn-swr-reset');
+  if (btn) btn.disabled = !port;
+}
+
+document.getElementById('btn-swr-reset').addEventListener('click', async () => {
+  if (!port || busy) return;
+  try {
+    logSection('SWR protection reset');
+    await cat('SR0;');                 // Set form returns nothing on success; "?;" on old firmware
+    await delay(getCmdDelay());
+    const r = await cat('SR;');        // read back status
+    const s = (r.startsWith('SR') ? r.slice(2) : r).trim();
+    if (s === '0') {
+      radioIdent.swrLock = false;
+      log('SWR protection cleared — transmit enabled again.');
+      toast('SWR protection reset ✓');
+    } else if (s === '1') {
+      log('SWR protection still active — check antenna/load before transmitting.', 'log-err');
+      toast('SWR protection still active', true);
+    } else {
+      log('SR; readback unclear: "' + r + '"', 'log-info');
+    }
+  } catch(e) {
+    if (e.catError) {
+      log('SR; not supported — needs firmware 1_04_004 or later.', 'log-info');
+      toast('SR needs fw 1_04_004+', true);
+    } else {
+      logErr('SWR reset failed: ' + e.message);
+    }
+  }
+});
+
+// Drain the rx buffer for `ms` milliseconds, discarding everything
+async function drainRx(ms) {
+  rxBuf = '';
+  await delay(ms);
+  rxBuf = '';  // discard anything that arrived during the wait
+}
+
+// Send ID; and check if response looks like CAT or terminal garbage.
+// Returns 'ok', 'terminal', or 'none'
+async function catProbe() {
+  rxBuf = '';
+  try {
+    const enc = new TextEncoder();
+    const w = port.writable.getWriter();
+    await w.write(enc.encode('ID;'));
+    w.releaseLock();
+    logTx('ID; [probe]');
+
+    // Wait up to 600ms for any response
+    const resp = await new Promise(resolve => {
+      let timer;
+      const check = () => {
+        if (rxBuf.includes(';')) {
+          clearTimeout(timer);
+          resolve(rxBuf);
+        }
+      };
+      // Poll rxBuf
+      const poll = setInterval(check, 20);
+      timer = setTimeout(() => {
+        clearInterval(poll);
+        resolve(rxBuf);
+      }, 150);
+      // Also hook into incoming data via a one-shot check
+      const orig = rxResolve;  // save any pending
+      // We're polling rxBuf directly so no need to set rxResolve here
+    });
+
+    logRx(resp.slice(0, 60) + (resp.length > 60 ? '…' : ''));
+    rxBuf = '';
+
+    if (!resp) return 'none';
+    // Terminal mode sends VT100 escape sequences containing ESC (0x1B)
+    if ([...resp].some(c => c.charCodeAt(0) === 0x1b)) return 'terminal';
+    // CAT response to ID; is "ID020;"
+    if (resp.includes('ID') && resp.includes(';')) return 'ok';
+    // Got something with a semicolon but not clearly ID020 — still likely CAT
+    if (resp.includes(';')) return 'ok';
+    return 'none';
+  } catch(e) {
+    logErr('Probe failed: ' + e.message);
+    return 'none';
+  }
+}
+
+// Send EXIT + CR to leave terminal mode, then drain
+async function exitTerminalMode() {
+  try {
+    const enc = new TextEncoder();
+    const w = port.writable.getWriter();
+    // "Exit terminal" is a menu option — navigate there by sending CR to get to main menu
+    // then the QMX terminal EXIT command
+    await w.write(enc.encode('EXIT\r'));
+    w.releaseLock();
+    logTx('EXIT\r [exit terminal mode]');
+  } catch(e) {
+    logErr('exitTerminalMode: ' + e.message);
+  }
+}
+
+btnDisconnect.addEventListener('click', async () => {
+  await closePort();
+  setConnected('disconnected');
+  log('Disconnected');
+});
+
+let closing = false;  // flag read loop checks on each iteration
+let termTap = null;   // V25: when set, raw serial text goes to the terminal-menu reader
+
+async function closePort() {
+  if (!port) return;
+  closing = true;
+
+  // Kill any pending timers / promises first
+  if (rxTimer) { clearTimeout(rxTimer); rxTimer = null; }
+  if (rxReject) { const r = rxReject; rxResolve = null; rxReject = null; r(new Error('Port closed')); }
+
+  // Release writer if held
+  try { if (writer) { writer.releaseLock(); writer = null; } } catch(e) {}
+
+  // Cancel reader — releaseLock is called inside the read loop's finally block
+  try { if (reader) { reader.cancel(); } } catch(e) {}
+
+  // Give the read loop a moment to exit and release the lock naturally
+  await delay(80);
+
+  // Force-release if the loop didn't exit cleanly
+  try { if (reader) { reader.releaseLock(); reader = null; } } catch(e) {}
+
+  // Now close the port
+  try { await port.close(); } catch(e) {}
+  port = null;
+  closing = false;
+}
+
+// ── Serial reader ──
+async function startReader() {
+  const dec = new TextDecoder();
+  try {
+    while (port && port.readable && !closing) {
+      reader = port.readable.getReader();
+      try {
+        while (!closing) {
+          const { value, done } = await reader.read();
+          if (done || closing) break;
+          const chunk = dec.decode(value, { stream: true });
+          if (termTap) { termTap(chunk); continue; }   // V25: terminal menu session owns the bytes
+          rxBuf += chunk;
+          if (rxResolve && rxBuf.includes(';')) {
+            const semi = rxBuf.indexOf(';');
+            const resp = rxBuf.slice(0, semi + 1);
+            // Only resolve if response looks like a CAT response (starts with MM, Q, FA, ID etc)
+            // or is the error response ?;
+            // VT100 sequences like "42H[0K[2;" should NOT resolve — keep buffering.
+            const looksLikeCAT = /^(MM|ML|MU|FA|FB|FR|FT|MD|KS|AG|RG|SP|RT|RR|TR|IF|ID|UI|VN|OM|PC|PS|SW|SM|SA|SS|TQ|TM|TB|TA|KY|KD|LC|FW|RX|TX|RC|RD|RU|C2|PL|AI|BN|BD|BU|GP|SR|Q[0-9A-J]|\?)/.test(resp);
+            if (looksLikeCAT) {
+              rxBuf = rxBuf.slice(semi + 1);
+              if (rxTimer) { clearTimeout(rxTimer); rxTimer = null; }
+              const res = rxResolve;
+              rxResolve = null; rxReject = null;
+              res(resp);
+            } else {
+              // VT100 garbage — discard up to and including this ; and keep waiting
+              rxBuf = rxBuf.slice(semi + 1);
+            }
+          }
+        }
+      } catch(e) {
+        if (rxReject) { const r = rxReject; rxResolve = null; rxReject = null; r(e); }
+      } finally {
+        try { reader.releaseLock(); } catch(e) {}
+        reader = null;
+      }
+    }
+  } catch(e) { /* port gone */ }
+}
+
+// ── Send a CAT command, return response (or '' if no response expected) ──
+async function sendCAT(cmd, waitResp = true, timeoutMs = 150) {
+  if (!port || !port.writable) throw new Error('Port not open');
+  const enc = new TextEncoder();
+  const writable = port.writable;
+  writer = writable.getWriter();
+  try {
+    await writer.write(enc.encode(cmd)); // CAT only — NO CR/LF (CR triggers terminal mode on QMX)
+  } finally {
+    writer.releaseLock();
+    writer = null;
+  }
+  logTx(cmd);
+
+  if (!waitResp) return '';
+
+  return new Promise((resolve, reject) => {
+    rxResolve = resolve;
+    rxReject  = reject;
+    // For commands that don't respond, resolve with '' after timeout
+    rxTimer = setTimeout(() => {
+      if (rxResolve) {
+        rxResolve = null; rxReject = null;
+        resolve('');  // timeout — no response from this command
+      }
+    }, timeoutMs);
+  });
+}
+
+// ── Small delay to avoid overwhelming QMX serial buffer ──
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Typed error for QMX ?; responses ──
+class CatError extends Error {
+  constructor(cmd) { super(`Not supported: ${cmd}`); this.catError = true; }
+}
+
+// ── Corrected send: commands must end with ; ──
+// Returns trimmed response body (without trailing ;).
+// Throws CatError if QMX replies ?; (unsupported / bad param).
+// Returns '' on timeout (command accepted, no response body).
+async function cat(cmd, waitResp = true, timeout = 150) {
+  const full = cmd.endsWith(';') ? cmd : cmd + ';';
+  const resp = await sendCAT(full, waitResp, timeout);
+  if (resp) logRx(resp);
+  const body = resp.replace(/;$/, '').trim();
+  if (body === '?') throw new CatError(full);
+  return body;
+}
+
+// ── Parse standard response: strip leading command echo ──
+function parseResp(cmd2, raw) {
+  // raw e.g. "FA00007030000" or "AG0091"
+  if (!raw) return null;
+  if (raw.startsWith(cmd2)) return raw.slice(cmd2.length);
+  return raw;
+}
+
+// ═════════════════════════════════════════════
+//  BACKUP DEFINITIONS
+// ═════════════════════════════════════════════
+
+const STD_PARAMS = [
+  { key:'FA', desc:'VFO A frequency', get:'FA;', parse: r => parseResp('FA', r) },
+  { key:'FB', desc:'VFO B frequency', get:'FB;', parse: r => parseResp('FB', r) },
+  { key:'MD', desc:'Operating mode (3=CW,6=FSK,7=CWR,9=FSR)', get:'MD;', parse: r => parseResp('MD', r) },
+  { key:'KS', desc:'Keyer speed (WPM)', get:'KS;', parse: r => parseResp('KS', r) },
+  { key:'AG', desc:'AF Gain (0.25dB steps)', get:'AG0;', parse: r => parseResp('AG0', r) },
+  { key:'RG', desc:'RF Gain (dB)', get:'RG;', parse: r => parseResp('RG', r) },
+  { key:'SP', desc:'Split mode (0/1)', get:'SP;', parse: r => parseResp('SP', r) },
+  { key:'RT', desc:'RIT status (0=off,1=on)', get:'RT;', parse: r => parseResp('RT', r) },
+  { key:'FR', desc:'Receive VFO mode', get:'FR;', parse: r => parseResp('FR', r) },
+  { key:'FT', desc:'Transmit VFO mode', get:'FT;', parse: r => parseResp('FT', r) },
+];
+
+// Q-series: session params (Q0–QB, QC, QJ)
+const Q_PARAMS = [
+  { key:'Q0', desc:'TCXO reference freq (Hz)', get:'Q0;', set:'Q0{v};', parse: r => parseResp('Q0', r) },
+  { key:'Q1', desc:'Sideband (0=USB, 1=LSB)', get:'Q1;', set:'Q1{v};', parse: r => parseResp('Q1', r) },
+  { key:'Q3', desc:'VOX enable (0/1)', get:'Q3;', set:'Q3{v};', parse: r => parseResp('Q3', r) },
+  { key:'Q4', desc:'TX Rise Threshold %', get:'Q4;', set:'Q4{v};', parse: r => parseResp('Q4', r) },
+  { key:'Q5', desc:'TX Fall Threshold %', get:'Q5;', set:'Q5{v};', parse: r => parseResp('Q5', r) },
+  { key:'Q6', desc:'Cycle Min', get:'Q6;', set:'Q6{v};', parse: r => parseResp('Q6', r) },
+  { key:'Q7', desc:'Sample Min', get:'Q7;', set:'Q7{v};', parse: r => parseResp('Q7', r) },
+  { key:'Q8', desc:'Discard', get:'Q8;', set:'Q8{v};', parse: r => parseResp('Q8', r) },
+  { key:'Q9', desc:'IQ Mode (0/1)', get:'Q9;', set:'Q9{v};', parse: r => parseResp('Q9', r) },
+  { key:'QA', desc:'Japanese Band Limits (0/1)', get:'QA;', set:'QA{v};', parse: r => parseResp('QA', r) },
+  { key:'QB', desc:'CAT timeout enable (0/1)', get:'QB;', set:'QB{v};', parse: r => parseResp('QB', r) },
+  { key:'QC', desc:'CAT timeout (seconds)', get:'QC;', set:'QC{v};', parse: r => parseResp('QC', r) },
+  { key:'QJ', desc:'TX shift threshold', get:'QJ;', set:'QJ{v};', parse: r => parseResp('QJ', r) },
+];
+
+// Band config rows (from the manual)
+const BAND_ROWS = [
+  'Band name (m)',
+  'RF gain (dB)',
+  'Frequency min.',
+  'Frequency center',
+  'Frequency max.',
+  'Sweep start',
+  'Sweep step',
+  'BPF number (0-7)',
+  'LPF number (0-5)',
+  'PIN fwd bias mA',
+  'Transmit',
+  'TX PTT +5V',
+  'TX PTT grounded',
+  'RX PTT +5V',
+  'RX PTT grounded',
+];
+
+const NUM_BANDS = 16;
+
+// ═════════════════════════════════════════════
+//  HARDWARE-DEPENDENT PARAMETER POLICY (V21)
+// ═════════════════════════════════════════════
+// "Band version" (System config): the manual calls it read-only, but an MM Set
+// actually WORKS — it re-identifies the radio's hardware variant (a QMX 60-15m
+// restored from a QMX+ backup believes it is a QMX+ after the next power-cycle,
+// and repopulates its band table accordingly). Restore must therefore NEVER
+// write this parameter, under any circumstances.
+//
+// "GPS source" and "Real time clock" have values that are only valid on one
+// hardware model ("QMX+ Internal" needs QMX+ hardware; "Paddle port"/"Software"
+// work everywhere but would clobber a QMX+'s internal-hardware selection when
+// transferring QMX → QMX+). Policy: these are only written when the backup and
+// the live radio have the SAME Band version. On any cross-variant transfer
+// (either direction), or when the variant cannot be established, they are
+// skipped and flagged as restore issues to check manually.
+const HW_IDENTITY_LEAVES = ['band version'];   // never written, ever
+const HW_DEPENDENT_LEAVES = [
+  { leaf: 'gps source',      reason: 'GPS hardware differs between QMX and QMX+' },
+  { leaf: 'real time clock', reason: 'hardware RTC exists only on QMX+' },
+];
+const isHwIdentityLeaf  = name => HW_IDENTITY_LEAVES.includes(String(name || '').toLowerCase().replace(/\s+/g, ' ').trim());
+const findHwDependent   = name => HW_DEPENDENT_LEAVES.find(h => h.leaf === String(name || '').toLowerCase().replace(/\s+/g, ' ').trim());
+
+// ═════════════════════════════════════════════
+//  MENU DISCOVERY & CRAWL
+// ═════════════════════════════════════════════
+
+// Discover a menu item. Returns { type, listType, name, cols } or null.
+// null means "no item here" (end of list). CatError => also null.
+async function mmDiscover(path) {
+  try {
+    const resp = await cat(`MM${path}?`, true, 200);
+    if (!resp) return null;
+    const body = resp.startsWith('MM') ? resp.slice(2) : resp;
+    const parts = body.split('|');
+    if (parts.length < 3) return null;
+    const type = parseInt(parts[0]);
+    const listType = parseInt(parts[1]);
+    let name = parts[2];
+    let cols = null;
+    const colMatch = name.match(/^(.+)\[(\d+)\]$/);
+    if (colMatch) { name = colMatch[1]; cols = parseInt(colMatch[2]); }
+    return { type, listType, name, cols };
+  } catch(e) {
+    if (e.catError) return null; // ?; = end of list or not supported
+    throw e;
+  }
+}
+
+// Get a menu item value.
+// Returns raw value string, or null if unavailable on this firmware.
+async function mmGet(path) {
+  try {
+    const resp = await cat(`MM${path}`, true, 150);
+    if (!resp) return null;
+    const body = resp.startsWith('MM') ? resp.slice(2) : resp;
+    return body || null;
+  } catch(e) {
+    if (e.catError) return null; // ?; = not supported on this firmware
+    throw e;
+  }
+}
+
+// Crawl all menu items recursively.
+// Each result stores:
+//   indexPath  — numeric index path used for the GET (e.g. "0|0|3")
+//   namedPath  — full named path for SET on restore (e.g. "Audio|AGC settings|Noise filter")
+//   name       — leaf item name
+//   type, value, unavailable
+async function crawlMenus(onProgress, cmdDelay = 5) {
+  const results = [];
+  let total = 0;
+
+  // A path component whose name BEGINS with a digit must be addressed by
+  // index: the QMX parser does a leading-digit parse, so "500 Hz" is read
+  // as index 500 just as "50" is read as index 50. Index form is always valid.
+  const isNumeric = s => /^\d/.test(s);
+
+  // namedPrefix: pipe-delimited named path (human-readable, used for matching)
+  // setPrefix:   pipe-delimited path safe for Set/Get commands — any component
+  //              whose NAME is purely numeric (e.g. CW filter widths "50", "100",
+  //              tune/RIT rate entries) is replaced by its INDEX at that level,
+  //              because the QMX parser treats a numeric name as an index and
+  //              returns ?; if the name form is used.
+  async function crawlLevel(pathPrefix, namedPrefix, setPrefix, depth) {
+    if (depth > 4) return;
+    let idx = 0;
+    while (true) {
+      const path = pathPrefix === '' ? String(idx) : `${pathPrefix}|${idx}`;
+      const item = await mmDiscover(path);
+      if (!item) break;
+
+      total++;
+      if (onProgress) onProgress(item.name, path);
+
+      // Build named path (for display/matching) and set path (for CAT commands)
+      const namedPath = namedPrefix === '' ? item.name : `${namedPrefix}|${item.name}`;
+      const setComp   = isNumeric(item.name) ? String(idx) : item.name;
+      const setPath   = setPrefix === '' ? setComp : `${setPrefix}|${setComp}`;
+
+      if (item.type === 0) {
+        if (item.cols !== null) {
+          // Grid page — crawl rows × cols
+          const gridResults = await crawlGrid(path, namedPath, setPath, item.name, item.cols, cmdDelay);
+          results.push(...gridResults);
+        } else {
+          // Sub-menu — recurse, extending both paths
+          await crawlLevel(path, namedPath, setPath, depth + 1);
+        }
+      } else if (item.type === 1 || item.type === 6) {
+        // Application/action or Info — no storable value
+      } else {
+        // Leaf: get value using index path (faster/unambiguous)
+        const val = await mmGet(path);
+        results.push({
+          indexPath:  path,      // for reference/debug only
+          namedPath:  namedPath, // used for MATCHING backup ↔ live
+          setPath:    setPath,   // used for SET/GET on restore — numeric-name safe
+          name:       item.name,
+          type:       item.type,
+          value:      val,
+          unavailable: val === null
+        });
+        await delay(cmdDelay);
+      }
+      idx++;
+    }
+  }
+
+  async function crawlGrid(gridPath, gridNamedPath, gridSetPath, gridName, numCols, cmdDelay) {
+    const gridResults = [];
+    let rowIdx = 0;
+    const rows = [];
+    while (true) {
+      const rowItem = await mmDiscover(`${gridPath}|${rowIdx}`);
+      if (!rowItem) break;
+      rows.push({ idx: rowIdx, name: rowItem.name, type: rowItem.type });
+      rowIdx++;
+    }
+
+    for (const row of rows) {
+      for (let col = 0; col < numCols; col++) {
+        // Numeric-named rows must use index form in CAT paths
+        const isNumericName = isNumeric(row.name);
+        const accessPath = isNumericName
+          ? `${gridPath}|${row.idx}[${col}]`
+          : `${gridPath}|${row.name}[${col}]`;
+        const namedSetPath = `${gridNamedPath}|${row.name}[${col}]`;
+        const safeSetPath  = isNumericName
+          ? `${gridSetPath}|${row.idx}[${col}]`
+          : `${gridSetPath}|${row.name}[${col}]`;
+        const val = await mmGet(accessPath);
+        gridResults.push({
+          indexPath:  accessPath,
+          namedPath:  namedSetPath,
+          setPath:    safeSetPath,
+          name:       `${gridName} / ${row.name} [band ${col}]`,
+          type:       row.type,
+          value:      val,
+          unavailable: val === null
+        });
+        await delay(cmdDelay);
+      }
+    }
+    return gridResults;
+  }
+
+  await crawlLevel('', '', '', 0);
+  return results;
+}
+
+// ═════════════════════════════════════════════
+//  BACKUP
+// ═════════════════════════════════════════════
+
+btnBackup.addEventListener('click', async () => {
+  if (busy) return;
+  if (dataView.querySelectorAll('.val-edit.edited').length &&
+      !confirm(`You have ${dataView.querySelectorAll('.val-edit.edited').length} unsaved edited value(s) in the Data tab.\n\nReading all parameters will discard them and replace the table with fresh values from the radio.\n\nContinue?`)) return;
+  busy = true;
+  setConnected('busy');
+  btnBackup.disabled = true;
+  btnSave.disabled = true;
+
+  const backup = {
+    meta: {
+      timestamp: new Date().toISOString(),
+      firmware: null,
+      model: null,
+    },
+    standard: {},
+    q_series:  {},
+    band_config: {},
+    menu_items: []
+  };
+
+  const cmdDelay = getCmdDelay();
+  try {
+    logSection('Read all parameters — started');
+
+    // ── Firmware & model ──
+    setProgress(2, 'Reading firmware version…');
+    const vn = await cat('VN;');
+    backup.meta.firmware = vn.startsWith('VN') ? vn.slice(2) : vn;
+    log('Firmware: ' + backup.meta.firmware);
+
+    const om = await cat('OM;');
+    backup.meta.model = om.startsWith('OM') ? om.slice(2) : om;
+    log('Model: ' + backup.meta.model);
+
+    try {
+      const ui = await cat('UI;');
+      backup.meta.chip_id = ui.startsWith('UI') ? ui.slice(2) : ui;
+      log('Chip ID: ' + backup.meta.chip_id);
+    } catch(e) {
+      backup.meta.chip_id = null;  // pre-1_04_003 firmware
+    }
+
+    // ── New in fw 1_04_003/1_04_004: band number, SWR protection state, GPS fix ──
+    try {
+      const bn = await cat('BN;');
+      backup.meta.band_number = bn.startsWith('BN') ? bn.slice(2) : bn;
+      log('Active band index: ' + backup.meta.band_number);
+    } catch(e) {
+      backup.meta.band_number = null;  // pre-1_04_003 firmware
+    }
+    try {
+      const sr = await cat('SR;');
+      const s = (sr.startsWith('SR') ? sr.slice(2) : sr).trim();
+      backup.meta.swr_protection_triggered = (s === '1');
+      if (s === '1') log('⚠ SWR protection is currently TRIGGERED on this radio', 'log-err');
+    } catch(e) {
+      backup.meta.swr_protection_triggered = null;  // pre-1_04_004 firmware
+    }
+    try {
+      const gp = await cat('GP;', true, 400);
+      const fix = gp === '' ? null : parseGP(gp.startsWith('GP') ? gp.slice(2) : gp);
+      if (fix && !fix.noFix) {
+        backup.meta.gps = fix;
+        radioIdent.gps = fix;   // keep connection status in sync with freshest fix
+        log(`GPS fix at backup: ${fix.lat}, ${fix.lon} · grid ${fix.grid} · ${fix.date} ${fix.time} UTC`);
+      } else {
+        if (gp === '')          log('GPS: no reply to GP; at backup time (timeout)', 'log-info');
+        else if (fix?.noFix)    log('GPS: responding but no position fix at backup time', 'log-info');
+        else                    log(`GPS: GP; reply not recognised — raw: "${gp}"`, 'log-info');
+        // Fall back to the fix captured at connect, if we have one
+        if (radioIdent.gps) {
+          backup.meta.gps = radioIdent.gps;
+          log(`GPS: using fix from connect instead: ${radioIdent.gps.lat}, ${radioIdent.gps.lon} · grid ${radioIdent.gps.grid}`, 'log-info');
+        } else {
+          backup.meta.gps = null;
+        }
+      }
+    } catch(e) {
+      // ?; reply (unsupported) — still use the connect-time fix if available
+      backup.meta.gps = radioIdent.gps || null;
+      if (backup.meta.gps) log(`GPS: GP; refused at backup time — using fix from connect (grid ${backup.meta.gps.grid})`, 'log-info');
+    }
+
+    // ── Standard CAT params ──
+    logSection('Standard CAT parameters');
+    setProgress(5, 'Reading standard CAT parameters…');
+    for (let i = 0; i < STD_PARAMS.length; i++) {
+      const p = STD_PARAMS[i];
+      setProgress(5 + (i / STD_PARAMS.length) * 10, `Reading ${p.key}…`);
+      try {
+        const resp = await cat(p.get);
+        const val = p.parse(resp);
+        backup.standard[p.key] = { value: val, desc: p.desc };
+      } catch(e) {
+        if (e.catError) {
+          log(`${p.key}: not available on this firmware — skipped`, 'log-info');
+          backup.standard[p.key] = { value: null, unavailable: true, desc: p.desc };
+        } else {
+          logErr(`${p.key}: ${e.message}`);
+          backup.standard[p.key] = { value: null, desc: p.desc };
+        }
+      }
+    }
+
+    // ── Q-series ──
+    logSection('Q-series parameters');
+    setProgress(17, 'Reading Q-series parameters…');
+    for (let i = 0; i < Q_PARAMS.length; i++) {
+      const p = Q_PARAMS[i];
+      setProgress(17 + (i / Q_PARAMS.length) * 8, `Reading ${p.key}…`);
+      try {
+        const resp = await cat(p.get);
+        const val = p.parse(resp);
+        backup.q_series[p.key] = { value: val, desc: p.desc, set: p.set };
+      } catch(e) {
+        if (e.catError) {
+          log(`${p.key}: not available on this firmware — skipped`, 'log-info');
+          backup.q_series[p.key] = { value: null, unavailable: true, desc: p.desc, set: p.set };
+        } else {
+          logErr(`${p.key}: ${e.message}`);
+          backup.q_series[p.key] = { value: null, desc: p.desc, set: p.set };
+        }
+      }
+    }
+
+    // ── Band config (MM) ──
+    logSection('Band configuration (all 16 bands)');
+    setProgress(27, 'Reading band configuration…');
+    for (let r = 0; r < BAND_ROWS.length; r++) {
+      const rowName = BAND_ROWS[r];
+      backup.band_config[rowName] = [];
+      setProgress(27 + (r / BAND_ROWS.length) * 18, `Band config: ${rowName}…`);
+      for (let col = 0; col < NUM_BANDS; col++) {
+        const path = `Band config.|${rowName}[${col}]`;
+        try {
+          const val = await mmGet(path);  // null = unavailable (?;) or empty
+          backup.band_config[rowName].push(val);
+        } catch(e) {
+          logErr(`Band config ${rowName}[${col}]: ${e.message}`);
+          backup.band_config[rowName].push(null);
+        }
+        await delay(cmdDelay);
+      }
+      log(`Band config row "${rowName}" — ${NUM_BANDS} bands read`);
+    }
+
+    // ── Full menu crawl ──
+    logSection('Full menu crawl (MM discovery)');
+    setProgress(47, 'Crawling menu tree…');
+    let crawlCount = 0;
+    backup.menu_items = await crawlMenus((name, path) => {
+      crawlCount++;
+      setProgress(47 + Math.min(crawlCount * 0.3, 48), `Menu: ${name}`);
+    }, cmdDelay);
+    log(`Menu crawl complete — ${backup.menu_items.length} items`);
+
+    // ── Done ──
+    setProgress(100, 'Read complete');
+    savedData = backup;
+    renderData(backup);
+    jsonArea.value = JSON.stringify(backup, null, 2);
+    btnSave.disabled = false;
+
+    switchTab('data');
+    toast(`Read complete ✓ — ${backup.menu_items.length + Object.keys(backup.standard).length + Object.keys(backup.q_series).length} parameters listed`);
+    log('✓ Read complete — nothing saved to file yet; use "Save Backup as JSON" to archive it');
+
+  } catch(e) {
+    logErr('Read failed: ' + e.message);
+    toast('Read failed: ' + e.message, true);
+  } finally {
+    busy = false;
+    setConnected('connected');
+    btnBackup.disabled = false;
+    setTimeout(hideProgress, 2000);
+  }
+});
+
+// ═════════════════════════════════════════════
+//  RESTORE
+// ═════════════════════════════════════════════
+
+btnRestoreFile.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  fileInput.value = '';
+
+  showLoading(`Loading ${file.name}…`);
+  let backup;
+  try {
+    const text = await file.text();
+    backup = JSON.parse(text);
+  } catch(e) {
+    await hideLoading();
+    toast('Invalid JSON file', true);
+    return;
+  }
+  // Keep overlay visible through confirm dialog — hide only if user cancels
+  await hideLoading();
+  const editWarn = dataView.querySelectorAll('.val-edit.edited').length
+    ? `\n\n⚠ You have ${dataView.querySelectorAll('.val-edit.edited').length} unsaved edited value(s) in the Data tab — this will discard them.`
+    : '';
+  if (!confirm(`Restore from backup dated:\n${backup.meta?.timestamp || 'unknown'}\nBackup firmware: ${backup.meta?.firmware || 'unknown'}\n\nThe QMX will first be scanned so only changed settings are written.${editWarn}\nContinue?`)) return;
+
+  if (busy) return;
+  busy = true;
+  setConnected('busy');
+  btnBackup.disabled = true;
+  btnRestoreFile.disabled = true;
+
+  let ok = 0, fail = 0, skip = 0, mismatch = 0, unchanged = 0;
+  const cmdDelay = getCmdDelay();
+
+  // ── Normalise a named path for comparison ──
+  const normPath = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const sameVal  = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
+  // ═════ PRE-RESTORE SCAN: crawl the live radio & correlate ═════
+  showLoading('Scanning QMX menu tree…');
+  logSection('Pre-restore scan (live menu crawl)');
+
+  let liveFw = '?', liveChip = null;
+  try { const vn = await cat('VN;'); liveFw = vn.startsWith('VN') ? vn.slice(2) : vn; } catch(e) {}
+  try { const ui = await cat('UI;'); liveChip = ui.startsWith('UI') ? ui.slice(2) : ui; } catch(e) {}
+  log(`Radio firmware: ${liveFw}  ·  Backup firmware: ${backup.meta?.firmware || 'unknown'}`);
+
+  // SWR protection state (fw 1_04_004+) — informational, restore itself never transmits
+  try {
+    const sr = await cat('SR;');
+    const s = (sr.startsWith('SR') ? sr.slice(2) : sr).trim();
+    if (s === '1') log('⚠ SWR protection is TRIGGERED on this radio — TX is locked. Clear it with the "Reset SWR protection" button after restore.', 'log-err');
+  } catch(e) { /* pre-1_04_004 firmware */ }
+  if (backup.meta?.band_number != null) {
+    log(`Backup was made on band index ${backup.meta.band_number} (BN). Restore does not change the active band.`, 'log-info');
+  }
+
+  // Same physical radio? (chip ID available from fw 1_04_003)
+  let otherRadioNote = '';
+  if (liveChip && backup.meta?.chip_id && liveChip !== backup.meta.chip_id) {
+    log(`⚠ Chip ID mismatch — backup is from a DIFFERENT radio!`, 'log-err');
+    log(`   This radio: ${liveChip}`, 'log-err');
+    log(`   Backup:     ${backup.meta.chip_id}`, 'log-err');
+    otherRadioNote = '\n⚠ WARNING: this backup was made on a DIFFERENT QMX (chip ID mismatch).\n';
+  } else if (liveChip && backup.meta?.chip_id) {
+    log(`Chip ID match — same radio (${liveChip})`, 'log-info');
+  }
+
+  const liveMap = new Map();   // normPath → { namedPath, name, type, value }
+  const leafMap = new Map();   // leaf name → array of live items (for remap fallback)
+  try {
+    let scanCount = 0;
+    const liveItems = await crawlMenus((name) => {
+      scanCount++;
+      setProgress(Math.min(scanCount * 0.3, 95), `Scanning: ${name}`);
+    }, cmdDelay);
+    for (const it of liveItems) {
+      liveMap.set(normPath(it.namedPath), it);
+      const leaf = normPath(it.name);
+      if (!leafMap.has(leaf)) leafMap.set(leaf, []);
+      leafMap.get(leaf).push(it);
+    }
+    log(`Live scan complete — ${liveItems.length} items on radio`);
+  } catch(e) {
+    logErr('Live scan failed: ' + e.message);
+    await hideLoading();
+    if (!confirm('Live scan of the QMX failed.\nFall back to a blind restore (write everything)?')) {
+      busy = false; setConnected('connected');
+      btnBackup.disabled = false; btnRestoreFile.disabled = false;
+      return;
+    }
+    showLoading('Restoring…');
+  }
+
+  // ── Build restore plan by correlating backup ↔ live ──
+  const plan = {
+    menuWrites: [],   // { path, value, name, remapped }
+    bandWrites: [],   // { path, value, label }
+    obsolete:   [],   // in backup, not found on radio
+    typeChanged:[],   // path exists but type differs — unsafe to write
+    fresh:      [],   // on radio, not in backup — left untouched
+    hwIdentity: [],   // Band version — NEVER written; { name, liveVal, value }
+    hwSkipped:  []    // hardware-dependent, skipped for manual review; { name, liveVal, value, reason }
+  };
+  const scanOk = liveMap.size > 0;
+
+  // ── Hardware variant detection (V21) ──
+  // Compare the live radio's "Band version" with the one stored in the backup.
+  // Any mismatch (or unknown) ⇒ hardware-dependent parameters are skipped.
+  const liveBandVersionItem = (leafMap.get('band version') || [])[0] || null;
+  const bkBandVersionItem   = (backup.menu_items || []).find(i => isHwIdentityLeaf(i.name)) || null;
+  const liveBandVersion = liveBandVersionItem ? liveBandVersionItem.value : null;
+  const bkBandVersion   = bkBandVersionItem   ? bkBandVersionItem.value   : null;
+  const variantKnown = liveBandVersion != null && bkBandVersion != null;
+  const sameVariant  = variantKnown && sameVal(liveBandVersion, bkBandVersion);
+  if (variantKnown) {
+    if (sameVariant) {
+      log(`Band version match: "${liveBandVersion}" — hardware-dependent settings will be restored normally`, 'log-info');
+    } else {
+      log(`⚠ Band version MISMATCH — radio: "${liveBandVersion}" · backup: "${bkBandVersion}"`, 'log-err');
+      log(`   "Band version" is never written by restore. Hardware-dependent settings (GPS source, Real time clock) will be skipped — check them manually.`, 'log-err');
+    }
+  } else {
+    log(`Band version could not be established on ${liveBandVersion == null ? 'the radio' : 'the backup'} — hardware-dependent settings will be skipped for safety`, 'log-info');
+  }
+
+  if (scanOk) {
+    // Menu items (excluding Band config, handled below)
+    for (const item of (backup.menu_items || [])) {
+      if (!item.namedPath || item.value === null || item.unavailable) continue;
+      if (item.type === 1 || item.type === 6) continue;
+      if (item.namedPath.startsWith('Band config.')) continue;
+
+      // ── V21 guard 1: "Band version" is NEVER written. An MM Set on it
+      //    silently re-identifies the radio's hardware variant (manual says
+      //    read-only, but the Set works — confirmed in the field).
+      if (isHwIdentityLeaf(item.name)) {
+        const liveBV = liveMap.get(normPath(item.namedPath)) ||
+                       (leafMap.get(normPath(item.name)) || [])[0];
+        if (liveBV && !sameVal(liveBV.value, item.value)) {
+          plan.hwIdentity.push({ name: item.name, liveVal: liveBV.value, value: item.value });
+        } else {
+          unchanged++;
+        }
+        continue;
+      }
+
+      // ── V21 guard 2: hardware-dependent parameters (GPS source, Real time
+      //    clock) are only written when backup and radio share the same Band
+      //    version. Cross-variant (either direction) or unknown ⇒ skip + flag.
+      const hwDep = findHwDependent(item.name);
+      if (hwDep && !sameVariant) {
+        const liveHW = liveMap.get(normPath(item.namedPath)) ||
+                       (leafMap.get(normPath(item.name)) || [])[0];
+        if (liveHW && sameVal(liveHW.value, item.value)) {
+          unchanged++;
+        } else {
+          plan.hwSkipped.push({
+            name: item.name,
+            liveVal: liveHW ? liveHW.value : '?',
+            value: item.value,
+            reason: hwDep.reason
+          });
+        }
+        continue;
+      }
+
+      const live = liveMap.get(normPath(item.namedPath));
+      if (live) {
+        if (item.type !== undefined && live.type !== undefined && live.type !== item.type) {
+          plan.typeChanged.push(item.namedPath);
+        } else if (sameVal(live.value, item.value)) {
+          unchanged++;
+        } else {
+          plan.menuWrites.push({ path: item.namedPath, setPath: live.setPath || item.namedPath, value: item.value, name: item.name, liveVal: live.value });
+        }
+      } else {
+        // Fallback: unique leaf-name match (item moved to another sub-menu)
+        const cands = (leafMap.get(normPath(item.name)) || [])
+          .filter(c => !c.namedPath.startsWith('Band config.') &&
+                       (item.type === undefined || c.type === item.type));
+        if (cands.length === 1) {
+          const c = cands[0];
+          if (sameVal(c.value, item.value)) { unchanged++; }
+          else {
+            plan.menuWrites.push({ path: c.namedPath, setPath: c.setPath || c.namedPath, value: item.value, name: item.name, remapped: item.namedPath, liveVal: c.value });
+          }
+        } else {
+          plan.obsolete.push(item.namedPath);
+        }
+      }
+    }
+
+    // ── Band config — match columns by BAND NAME, not column index ──
+    // The "Band name (m)" row is the key: a backup from a QMX+ (160–6m) can
+    // restore onto a 5-band QMX (80–20m) and vice versa. Bands are matched by
+    // name wherever they sit in each table; bands the radio doesn't have are
+    // skipped and reported. The "Band name (m)" row itself is never written,
+    // and no new bands are created — BPF/LPF/frequency layout is hardware.
+    const isRealBand = v => v !== null && String(v).trim() !== '' && String(v).trim() !== '0';
+    const bandKey = v => String(v).trim();
+
+    // Live band table: col → band name
+    const liveBands = new Map();   // bandName → liveCol
+    for (const [k, it] of liveMap) {
+      const m = k.match(/^band config\.\|band name \(m\)\[(\d+)\]$/);
+      if (m && isRealBand(it.value)) liveBands.set(bandKey(it.value), Number(m[1]));
+    }
+    // Backup band table: col → band name
+    const bkNames = (backup.band_config || {})['Band name (m)'] || [];
+    const backupBands = new Map();  // bandName → backupCol
+    bkNames.forEach((v, c) => { if (isRealBand(v)) backupBands.set(bandKey(v), c); });
+
+    const gridInScan = [...liveMap.keys()].some(k => k.startsWith('band config.'));
+    const colMap = new Map();       // backupCol → liveCol
+    plan.bandsMatched  = [];        // { band, from, to }
+    plan.bandsSkipped  = [];        // bands in backup, not on radio
+    plan.bandsRadioOnly= [];        // bands on radio, not in backup
+
+    if (gridInScan && backupBands.size) {
+      for (const [band, bCol] of backupBands) {
+        if (liveBands.has(band)) {
+          const lCol = liveBands.get(band);
+          colMap.set(bCol, lCol);
+          plan.bandsMatched.push({ band, from: bCol, to: lCol });
+        } else {
+          plan.bandsSkipped.push(band);
+        }
+      }
+      for (const [band] of liveBands) {
+        if (!backupBands.has(band)) plan.bandsRadioOnly.push(band);
+      }
+
+      for (const [rowName, values] of Object.entries(backup.band_config || {})) {
+        if (normPath(rowName) === 'band name (m)') continue;  // key row — never written
+        for (let bCol = 0; bCol < (values || []).length; bCol++) {
+          const val = values[bCol];
+          if (val === null) continue;
+          if (!colMap.has(bCol)) continue;  // band not on this radio — already reported
+          const lCol = colMap.get(bCol);
+          const path = `Band config.|${rowName}[${lCol}]`;
+          const live = liveMap.get(normPath(path));
+          if (!live) { plan.obsolete.push(path); continue; }  // row missing on this fw
+          const bandName = bkNames[bCol];
+          if (sameVal(live.value, val)) { unchanged++; }
+          else plan.bandWrites.push({
+            path, setPath: live.setPath || path, value: val,
+            label: `${bandName}m ${rowName}`, liveVal: live.value
+          });
+        }
+      }
+    } else {
+      // No band grid visible in scan (or backup has no band names) — old blind
+      // index-based behaviour as a last resort
+      for (const [rowName, values] of Object.entries(backup.band_config || {})) {
+        for (let col = 0; col < (values || []).length; col++) {
+          const val = values[col];
+          if (val === null) continue;
+          const path = `Band config.|${rowName}[${col}]`;
+          const live = liveMap.get(normPath(path));
+          if (live && sameVal(live.value, val)) { unchanged++; }
+          else plan.bandWrites.push({ path, setPath: live?.setPath || path, value: val, label: `Band config ${rowName}[${col}]`, liveVal: live?.value });
+        }
+      }
+    }
+
+    // Items new on this firmware, absent from backup
+    const backupPaths = new Set((backup.menu_items || []).map(i => normPath(i.namedPath || '')));
+    for (const [k, it] of liveMap) {
+      if (it.type === 1 || it.type === 6) continue;
+      if (!backupPaths.has(k)) plan.fresh.push(it.namedPath);
+    }
+  } else {
+    // Blind fallback: write everything, as V8 did — EXCEPT hardware-identity
+    // and hardware-dependent parameters. Without a live scan the radio's
+    // variant cannot be verified, so these are always skipped here (V21).
+    for (const item of (backup.menu_items || [])) {
+      if (!item.namedPath || item.value === null || item.unavailable) continue;
+      if (item.type === 1 || item.type === 6) continue;
+      if (item.namedPath.startsWith('Band config.')) continue;
+      if (isHwIdentityLeaf(item.name)) {
+        log(`"${item.name}" is never written by restore (hardware identity) — skipped`, 'log-info');
+        continue;
+      }
+      const hwDep = findHwDependent(item.name);
+      if (hwDep) {
+        plan.hwSkipped.push({ name: item.name, liveVal: '?', value: item.value, reason: hwDep.reason + ' (blind restore — variant unverifiable)' });
+        continue;
+      }
+      plan.menuWrites.push({ path: item.namedPath, setPath: item.setPath || item.namedPath, value: item.value, name: item.name });
+    }
+    for (const [rowName, values] of Object.entries(backup.band_config || {})) {
+      for (let col = 0; col < (values || []).length; col++) {
+        if (values[col] === null) continue;
+        plan.bandWrites.push({ path: `Band config.|${rowName}[${col}]`, setPath: `Band config.|${rowName}[${col}]`, value: values[col], label: `Band config ${rowName}[${col}]` });
+      }
+    }
+  }
+
+  // ── Report + confirm the plan before touching EEPROM ──
+  if (scanOk) {
+    // Band variant recognition
+    if (plan.bandsMatched && (plan.bandsMatched.length || plan.bandsSkipped.length || plan.bandsRadioOnly.length)) {
+      const liveList = plan.bandsMatched.map(b => b.band).concat(plan.bandsRadioOnly).join(', ');
+      const bkList   = plan.bandsMatched.map(b => b.band).concat(plan.bandsSkipped).join(', ');
+      logSection('Band variant recognition');
+      log(`This radio's bands: ${liveList || '(none found)'}m`, 'log-info');
+      log(`Backup's bands:     ${bkList || '(none found)'}m`, 'log-info');
+      for (const b of plan.bandsMatched) {
+        if (b.from !== b.to) log(`   ↪ ${b.band}m matched: backup column ${b.from} → radio column ${b.to}`, 'log-info');
+      }
+      if (plan.bandsSkipped.length)
+        log(`   − Not on this radio, skipped: ${plan.bandsSkipped.join('m, ')}m`, 'log-info');
+      if (plan.bandsRadioOnly.length)
+        log(`   + On this radio only, left untouched: ${plan.bandsRadioOnly.join('m, ')}m`, 'log-info');
+    }
+
+    const allWrites = [...plan.menuWrites.map(w => ({...w, label: w.name})), ...plan.bandWrites];
+    if (allWrites.length) {
+      log(`${allWrites.length} setting(s) differ and will be written:`, 'log-info');
+      for (const w of allWrites)
+        log(`   ≠ ${w.label}: "${w.liveVal ?? '?'}" → "${w.value}"`, 'log-info');
+    }
+    if (plan.obsolete.length) {
+      log(`${plan.obsolete.length} item(s) in backup not found on this firmware — will be skipped:`, 'log-info');
+      for (const p of plan.obsolete) log(`   − ${p}`, 'log-info');
+    }
+    if (plan.typeChanged.length) {
+      log(`${plan.typeChanged.length} item(s) changed data type between firmware versions — skipped for safety:`, 'log-err');
+      for (const p of plan.typeChanged) log(`   ! ${p}`, 'log-err');
+    }
+    if (plan.fresh.length) {
+      log(`${plan.fresh.length} item(s) new on this firmware, not in backup — left at current values:`, 'log-info');
+      for (const p of plan.fresh) log(`   + ${p}`, 'log-info');
+    }
+    const remaps = plan.menuWrites.filter(w => w.remapped);
+    for (const r of remaps) log(`   ↪ remapped "${r.remapped}" → "${r.path}"`, 'log-info');
+
+    // ── V21: hardware-guard report ──
+    if (plan.hwIdentity.length || plan.hwSkipped.length) {
+      logSection('Hardware-dependent parameters (protected)');
+      for (const h of plan.hwIdentity) {
+        log(`⛔ ${h.name}: radio "${h.liveVal}" · backup "${h.value}" — NEVER written by restore.`, 'log-err');
+        log(`   Writing it would re-identify the radio's hardware variant (requires an MM command + power-cycle to undo).`, 'log-err');
+      }
+      for (const h of plan.hwSkipped) {
+        log(`⚠ ${h.name}: radio "${h.liveVal}" · backup "${h.value}" — skipped (${h.reason}).`, 'log-err');
+        log(`   → Check this setting manually on the radio after restore.`, 'log-err');
+      }
+    }
+
+    await hideLoading();
+    const writeCount = plan.menuWrites.length + plan.bandWrites.length;
+    const diffList = allWrites.slice(0, 10)
+      .map(w => `    • ${w.label}: ${w.liveVal ?? '?'} → ${w.value}`)
+      .join('\n');
+    const moreNote = allWrites.length > 10 ? `\n    …and ${allWrites.length - 10} more (see log)` : '';
+    const hwNote =
+      (plan.hwIdentity.length
+        ? `\n⛔ Band version differs (radio "${plan.hwIdentity[0].liveVal}" vs backup "${plan.hwIdentity[0].value}") — it will NOT be changed.\n`
+        : '') +
+      (plan.hwSkipped.length
+        ? `\n⚠ ${plan.hwSkipped.length} hardware-dependent setting(s) skipped — CHECK MANUALLY after restore:\n` +
+          plan.hwSkipped.map(h => `    • ${h.name}: staying "${h.liveVal}" (backup: "${h.value}")`).join('\n') + '\n'
+        : '');
+    if (!confirm(
+`Pre-restore scan complete (radio fw ${liveFw}):
+${otherRadioNote}${hwNote}${(plan.bandsMatched && (plan.bandsSkipped.length || plan.bandsRadioOnly.length))
+  ? `\nBand variant differs from backup:\n  ${plan.bandsMatched.length} band(s) matched by name` +
+    (plan.bandsSkipped.length ? `\n  ${plan.bandsSkipped.join('m/')}m in backup only — skipped` : '') +
+    (plan.bandsRadioOnly.length ? `\n  ${plan.bandsRadioOnly.join('m/')}m on radio only — untouched` : '') + '\n'
+  : ''}
+  ${writeCount} setting(s) differ — will be written${writeCount ? ':\n' + diffList + moreNote : ''}
+
+  ${unchanged} already match — skipped (no EEPROM wear)
+  ${plan.obsolete.length} in backup but not on this firmware — skipped
+  ${plan.typeChanged.length} changed type — skipped for safety
+  ${plan.fresh.length} new on this firmware — left untouched
+
+Details are in the log. Proceed with restore?`)) {
+      busy = false; setConnected('connected');
+      btnBackup.disabled = false; btnRestoreFile.disabled = false;
+      log('Restore cancelled by user after scan.', 'log-info');
+      switchTab('log');
+      return;
+    }
+    showLoading('Restoring…');
+  }
+
+  const total = Object.keys(backup.standard || {}).length +
+                Object.keys(backup.q_series || {}).length +
+                plan.menuWrites.length + plan.bandWrites.length || 1;
+
+  // Write one MM parameter and verify by reading it back.
+  // The readback naturally paces EEPROM writes — the QMX won't respond
+  // to the Get until the Set is committed.
+  // Detect VT100/terminal bleed-through in a CAT response.
+  // VT100 CSI sequences contain patterns like "42H", "[2", "[37m" etc.
+  // Clean CAT responses only contain alphanumeric, '.', '-', '+', '_', space.
+  function isVT100(s) {
+    return /\d+H/.test(s) || /\[\d/.test(s) || /\[\?/.test(s) || s.charCodeAt(0) === 0x1b;
+  }
+
+  // Flush serial buffer after terminal bleed: wait for silence then clear.
+  async function resyncCAT() {
+    await delay(80);   // let QMX finish any terminal redraw
+    rxBuf = '';        // discard accumulated garbage
+    await delay(20);
+    rxBuf = '';
+  }
+
+  async function mmSetVerify(setCmd, getCmd, expected, label) {
+    try {
+      await cat(setCmd, true, 30);   // Set — 30ms catches ?; only
+      await delay(cmdDelay);
+
+      // Readback to verify
+      let readback = await cat(getCmd, true, 150);
+
+      // If response looks like VT100 garbage, the QMX terminal has taken over.
+      // Resync and retry the Get once.
+      if (isVT100(readback)) {
+        log(`${label}: terminal bleed detected — resyncing…`, 'log-info');
+        await resyncCAT();
+        readback = await cat(getCmd, true, 150);
+      }
+
+      const got = (readback.startsWith('MM') ? readback.slice(2) : readback).trim();
+      const exp = String(expected).trim();
+
+      if (got.toLowerCase() === exp.toLowerCase()) {
+        ok++;
+      } else if (got === '' || isVT100(got)) {
+        // Still garbage after resync — count as ok since Set didn't error
+        log(`${label}: readback unclear after resync — assuming ok`, 'log-info');
+        ok++;
+      } else {
+        log(`MISMATCH ${label}: expected "${exp}" got "${got}"`, 'log-err');
+        mismatch++;
+      }
+    } catch(e) {
+      if (e.catError) { log(`${label}: not supported — skipped`, 'log-info'); skip++; }
+      else { logErr(`${label}: ${e.message}`); fail++; }
+    }
+  }
+
+  try {
+    logSection('Restore started');
+
+    // ── Standard CAT ──
+    const STD_RESTORE = ['FA','FB','MD','KS','AG','RG','SP','RT'];
+    logSection('Restoring standard CAT parameters');
+    let done = 0;
+    for (const key of STD_RESTORE) {
+      const entry = backup.standard?.[key];
+      if (!entry || entry.value === null) continue;
+      done++;
+      setProgress(Math.round(done / total * 100), `Restoring ${key}…`);
+      try {
+        const cmd = buildStdSet(key, entry.value);
+        if (cmd) {
+          await cat(cmd, true, 30);
+          await delay(cmdDelay);
+          log(`Restored ${key} = ${entry.value}`);
+          ok++;
+        }
+      } catch(e) {
+        if (e.catError) { log(`${key}: not supported — skipped`, 'log-info'); skip++; }
+        else { logErr(`${key}: ${e.message}`); fail++; }
+      }
+    }
+
+    // ── Q-series (session only — no EEPROM write, no verify needed) ──
+    logSection('Restoring Q-series parameters');
+    for (const [key, entry] of Object.entries(backup.q_series || {})) {
+      if (!entry || entry.value === null || !entry.set) continue;
+      done++;
+      setProgress(Math.round(done / total * 100), `Restoring ${key}…`);
+      try {
+        const cmd = entry.set.replace('{v}', entry.value);
+        await cat(cmd, true, 30);
+        await delay(cmdDelay);
+        log(`Restored ${key} = ${entry.value}`);
+        ok++;
+      } catch(e) {
+        if (e.catError) { log(`${key}: not supported — skipped`, 'log-info'); skip++; }
+        else { logErr(`${key}: ${e.message}`); fail++; }
+      }
+    }
+
+    // ── Band config — only entries that differ from the live radio ──
+    logSection(`Restoring band configuration (${plan.bandWrites.length} changed)`);
+    for (const w of plan.bandWrites) {
+      done++;
+      setProgress(Math.round(done / total * 100), w.label + '…');
+      await mmSetVerify(`MM${w.setPath || w.path}=${w.value};`, `MM${w.setPath || w.path};`, w.value, w.label);
+    }
+
+    // ── Menu items — only entries that differ from the live radio ──
+    logSection(`Restoring menu items (${plan.menuWrites.length} changed)`);
+    for (const w of plan.menuWrites) {
+      done++;
+      setProgress(Math.round(done / total * 100), `Menu: ${w.name}…`);
+      await mmSetVerify(`MM${w.setPath || w.path}=${w.value};`, `MM${w.setPath || w.path};`, w.value, w.name + (w.remapped ? ' (remapped)' : ''));
+    }
+
+    setProgress(100, `Restore complete — ${ok} written, ${unchanged} already matched`);
+    const mismatchNote = mismatch ? ` (${mismatch} unverified)` : '';
+    toast(`Restore complete ✓ — ${ok} written, ${unchanged} already matched${mismatchNote}`);
+    log(`✓ Restore complete: ${ok} verified, ${unchanged} already matched (untouched), ${mismatch} readback mismatch, ${skip} skipped, ${fail} failed`);
+    if (plan.obsolete.length || plan.fresh.length)
+      log(`  Firmware delta: ${plan.obsolete.length} obsolete in backup, ${plan.fresh.length} new on radio — see scan section above`, 'log-info');
+    if (plan.hwIdentity.length)
+      log(`  ⛔ "Band version" was NOT changed (radio: "${plan.hwIdentity[0].liveVal}", backup: "${plan.hwIdentity[0].value}").`, 'log-err');
+    if (plan.hwSkipped.length) {
+      log(`  ⚠ ${plan.hwSkipped.length} hardware-dependent setting(s) were skipped — verify these on the radio now:`, 'log-err');
+      for (const h of plan.hwSkipped)
+        log(`     • ${h.name}: left at "${h.liveVal}" (backup had "${h.value}") — ${h.reason}`, 'log-err');
+    }
+
+    // Update display
+    savedData = backup;
+    renderData(backup);
+    jsonArea.value = JSON.stringify(backup, null, 2);
+    btnSave.disabled = false;
+    switchTab('log');
+
+  } catch(e) {
+    logErr('Restore failed: ' + e.message);
+    toast('Restore failed: ' + e.message, true);
+  } finally {
+    busy = false;
+    setConnected('connected');
+    btnBackup.disabled = false;
+    btnRestoreFile.disabled = false;
+    await hideLoading();
+    setTimeout(hideProgress, 3000);
+  }
+});
+
+function countRestoreItems(backup) {
+  let n = 0;
+  n += Object.keys(backup.standard || {}).length;
+  n += Object.keys(backup.q_series || {}).length;
+  for (const vals of Object.values(backup.band_config || {})) n += vals.length;
+  n += (backup.menu_items || []).length;
+  return Math.max(n, 1);
+}
+
+// Build set command for standard params
+function buildStdSet(key, val) {
+  switch(key) {
+    case 'FA': return `FA${val};`;
+    case 'FB': return `FB${val};`;
+    case 'MD': return `MD${val};`;
+    case 'KS': return `KS${val};`;
+    case 'AG': return `AG0${val};`;
+    case 'RG': return `RG${val};`;
+    case 'SP': return `SP${val};`;
+    case 'RT': return `RT${val};`;
+    default: return null;
+  }
+}
+
+// ═════════════════════════════════════════════
+//  RENDER DATA VIEW
+// ═════════════════════════════════════════════
+
+function renderData(b) {
+  let html = '';
+
+  // Metadata
+  html += `<div class="data-group">
+    <div class="data-group-title">Metadata</div>
+    <table class="data-table">
+      <tr><td class="key">Timestamp</td><td class="val">${b.meta?.timestamp || '—'}</td></tr>
+      <tr><td class="key">Firmware</td><td class="val">${b.meta?.firmware || '—'}</td></tr>
+      <tr><td class="key">Model</td><td class="val">${b.meta?.model || '—'}</td></tr>
+      <tr><td class="key">Chip ID</td><td class="val">${b.meta?.chip_id || '—'}</td></tr>
+      <tr><td class="key">Band index (BN)</td><td class="val">${b.meta?.band_number ?? '—'}</td></tr>
+      <tr><td class="key">SWR protection (SR)</td><td class="val">${
+        b.meta?.swr_protection_triggered === true  ? '⚠ TRIGGERED at backup time' :
+        b.meta?.swr_protection_triggered === false ? 'not triggered' : '—'}</td></tr>
+      <tr><td class="key">GPS fix (GP)</td><td class="val">${
+        b.meta?.gps ? `${b.meta.gps.lat}, ${b.meta.gps.lon}${b.meta.gps.grid ? ' (' + b.meta.gps.grid + ')' : ''} · ${b.meta.gps.date} ${b.meta.gps.time} UTC` : '—'}</td></tr>
+    </table>
+  </div>`;
+
+  // Standard CAT
+  html += `<div class="data-group">
+    <div class="data-group-title">Standard CAT Parameters</div>
+    <table class="data-table">`;
+  for (const [k,v] of Object.entries(b.standard || {})) {
+    const unavail = v.unavailable || v.value === null;
+    const valHtml = unavail
+      ? `<span class="val-unavail">—</span><span class="tag-unavail">n/a</span>`
+      : `<input class="val-edit" data-cat="standard" data-key="${escHtml(k)}" data-orig="${escHtml(v.value)}" value="${escHtml(v.value)}">`;
+    html += `<tr>
+      <td class="key">${escHtml(k)}</td>
+      <td>${valHtml}</td>
+      <td class="desc">${escHtml(v.desc)}</td>
+    </tr>`;
+  }
+  html += '</table></div>';
+
+  // Q-series
+  html += `<div class="data-group">
+    <div class="data-group-title">Q-Series Session Parameters</div>
+    <table class="data-table">`;
+  for (const [k,v] of Object.entries(b.q_series || {})) {
+    const unavail = v.unavailable || v.value === null;
+    const valHtml = unavail
+      ? `<span class="val-unavail">—</span><span class="tag-unavail">n/a</span>`
+      : `<input class="val-edit" data-cat="q" data-key="${escHtml(k)}" data-orig="${escHtml(v.value)}" value="${escHtml(v.value)}">`;
+    html += `<tr>
+      <td class="key">${escHtml(k)}</td>
+      <td>${valHtml}</td>
+      <td class="desc">${escHtml(v.desc)}</td>
+    </tr>`;
+  }
+  html += '</table></div>';
+
+  // Band config
+  const bandRows = Object.keys(b.band_config || {});
+  if (bandRows.length) {
+    html += `<div class="data-group">
+      <div class="data-group-title">Band Configuration (${NUM_BANDS} bands)</div>
+      <div style="overflow-x:auto">
+      <table class="band-table">
+        <thead><tr><th class="row-label">Parameter</th>`;
+    const numCols = b.band_config[bandRows[0]]?.length || NUM_BANDS;
+    for (let c = 0; c < numCols; c++) html += `<th>${c}</th>`;
+    html += '</tr></thead><tbody>';
+    for (const row of bandRows) {
+      html += `<tr><td class="row-label">${escHtml(row)}</td>`;
+      (b.band_config[row] || []).forEach((val, col) => {
+        if (val === null || val === undefined) {
+          html += `<td><span class="val-unavail">—</span></td>`;
+        } else {
+          const path = `Band config.|${row}[${col}]`;
+          html += `<td><input class="val-edit" data-cat="band" data-path="${escHtml(path)}" data-orig="${escHtml(val)}" value="${escHtml(val)}"></td>`;
+        }
+      });
+      html += '</tr>';
+    }
+    html += '</tbody></table></div></div>';
+  }
+
+  // Menu items — all entries, filterable via search box
+  const menuItems = b.menu_items || [];
+  html += `<div class="data-group">
+    <div class="data-group-title">Menu Items (${menuItems.length} entries)</div>
+    <table class="data-table">`;
+  for (const item of menuItems) {
+    const valHtml = item.unavailable || item.value === null
+      ? `<span class="val-unavail">—</span><span class="tag-unavail">n/a</span>`
+      : `<input class="val-edit" data-cat="menu" data-setpath="${escHtml(item.setPath || item.namedPath || '')}" data-indexpath="${escHtml(item.indexPath || item.path || '')}" data-orig="${escHtml(item.value)}" value="${escHtml(item.value)}">`;
+    const displayPath = item.namedPath || item.path || '';
+    html += `<tr>
+      <td class="key" style="max-width:380px;word-break:break-all">${escHtml(displayPath)}</td>
+      <td>${valHtml}</td>
+    </tr>`;
+  }
+  html += '</table></div>';
+
+  dataView.innerHTML = html;
+  updateEditCount();
+}
+
+// ═════════════════════════════════════════════
+//  EDIT VALUES DIRECTLY (Data tab)
+//  Turns the previously read-only value cells into inputs and lets you
+//  write back only the ones you've actually changed. No scan, no diff
+//  against live radio state beyond the readback verification of each
+//  write — this is a deliberately narrow, surgical tool, not a Restore.
+// ═════════════════════════════════════════════
+
+function isEditedInput(el) { return el.value.trim() !== (el.dataset.orig ?? '').trim(); }
+
+function updateEditCount() {
+  const inputs = dataView.querySelectorAll('.val-edit');
+  let n = 0;
+  inputs.forEach(el => {
+    const edited = isEditedInput(el);
+    el.classList.toggle('edited', edited);
+    if (edited) n++;
+  });
+  if (editCountEl) editCountEl.textContent = n;
+  if (btnWriteEdits) btnWriteEdits.disabled = busy || !n || !radioConnected;
+}
+
+dataView.addEventListener('input', (e) => {
+  if (e.target.classList && e.target.classList.contains('val-edit')) updateEditCount();
+});
+
+btnWriteEdits.addEventListener('click', async () => {
+  if (busy) return;
+  const inputs = Array.from(dataView.querySelectorAll('.val-edit')).filter(isEditedInput);
+  if (!inputs.length) { toast('No edited values to write'); return; }
+
+  const items = inputs.map(el => {
+    const newVal = el.value.trim();
+    const cat = el.dataset.cat;
+    if (cat === 'standard') {
+      const p = STD_PARAMS.find(x => x.key === el.dataset.key);
+      if (!p) return null;
+      // STD_PARAMS never defines a tested `set` command in this tool (it
+      // only ever reads these) — this infers the same {MNEMONIC}{value};
+      // pattern used by every other command here. Unverified on hardware.
+      return { setCmd: `${p.key}${newVal};`, getCmd: p.get, expected: newVal, label: `${p.key} — ${p.desc}`, el };
+    }
+    if (cat === 'q') {
+      const p = Q_PARAMS.find(x => x.key === el.dataset.key);
+      if (!p) return null;
+      return { setCmd: p.set.replace('{v}', newVal), getCmd: p.get, expected: newVal, label: `${p.key} — ${p.desc}`, el };
+    }
+    if (cat === 'band') {
+      const path = el.dataset.path;
+      return { setCmd: `MM${path}=${newVal};`, getCmd: `MM${path};`, expected: newVal, label: `Band config: ${path}`, el };
+    }
+    if (cat === 'menu') {
+      const setPath = el.dataset.setpath;
+      const getPath = el.dataset.indexpath || setPath;
+      return { setCmd: `MM${setPath}=${newVal};`, getCmd: `MM${getPath};`, expected: newVal, label: setPath, el };
+    }
+    return null;
+  }).filter(Boolean);
+
+  if (!items.length) { toast('Could not resolve any edited cells', true); return; }
+
+  const hasStandard = items.some(i => i.el.dataset.cat === 'standard');
+  const preview = items.slice(0, 6).map(i => `  • ${i.label} → ${i.expected}`).join('\n');
+  const more = items.length > 6 ? `\n  …and ${items.length - 6} more` : '';
+  const warn = hasStandard ? '\n\n⚠ Includes Standard CAT param(s) — their SET command format is inferred, not tested.' : '';
+  if (!confirm(`Write ${items.length} edited value(s) to the radio?\n\nThis writes ONLY the cells you changed — no scan, no diff against anything else.${warn}\n\n${preview}${more}\n\nContinue?`)) return;
+
+  busy = true; setConnected('busy');
+  showLoading('Writing edited values…');
+  logSection(`Writing ${items.length} edited value(s)`);
+  const cmdDelay = getCmdDelay();
+  let ok = 0, fail = 0;
+
+  const isVT100Edit = s => /\d+H/.test(s) || /\[\d/.test(s) || /\[\?/.test(s) || s.charCodeAt(0) === 0x1b;
+  const resyncCATEdit = async () => { await delay(80); rxBuf = ''; await delay(20); rxBuf = ''; };
+
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    setProgress(Math.round(100 * i / items.length), it.label);
+    try {
+      await cat(it.setCmd, true, 30);
+      await delay(cmdDelay);
+      let readback = await cat(it.getCmd, true, 150);
+      if (isVT100Edit(readback)) {
+        log(`${it.label}: terminal bleed detected — resyncing…`, 'log-info');
+        await resyncCATEdit();
+        readback = await cat(it.getCmd, true, 150);
+      }
+      const got = (readback.startsWith('MM') ? readback.slice(2) : readback).trim();
+      const exp = String(it.expected).trim();
+      if (got.toLowerCase() === exp.toLowerCase()) {
+        log(`✓ ${it.label} = ${exp}`, 'log-rx'); ok++;
+        it.el.dataset.orig = exp;
+        // Keep the in-memory/exportable backup consistent with what's now on the radio
+        if (savedData) {
+          const c = it.el.dataset.cat;
+          if (c === 'standard' && savedData.standard?.[it.el.dataset.key]) savedData.standard[it.el.dataset.key].value = exp;
+          else if (c === 'q' && savedData.q_series?.[it.el.dataset.key]) savedData.q_series[it.el.dataset.key].value = exp;
+          else if (c === 'menu') {
+            const m = savedData.menu_items?.find(x => (x.setPath || x.namedPath) === it.el.dataset.setpath);
+            if (m) m.value = exp;
+          } else if (c === 'band') {
+            const m = it.el.dataset.path.match(/^Band config\.\|(.+)\[(\d+)\]$/);
+            if (m && savedData.band_config?.[m[1]]) savedData.band_config[m[1]][parseInt(m[2], 10)] = exp;
+          }
+        }
+      } else {
+        log(`✗ ${it.label}: wrote "${exp}", read back "${got || '(no response)'}"`, 'log-err'); fail++;
+      }
+    } catch (e) {
+      log(`✗ ${it.label}: ${e.message}`, 'log-err'); fail++;
+    }
+  }
+
+  setProgress(100, fail ? `Done — ${ok} written, ${fail} failed` : `Done — ${ok} written`);
+  if (savedData) jsonArea.value = JSON.stringify(savedData, null, 2);
+  updateEditCount();
+  toast(fail ? `${ok} written, ${fail} failed — see log` : `${ok} value(s) written ✓`, fail > 0);
+  await hideLoading();
+  setTimeout(hideProgress, 1500);
+  busy = false; setConnected('connected');
+});
+
+// ═════════════════════════════════════════════
+//  SAVE / LOAD JSON
+// ═════════════════════════════════════════════
+
+btnSave.addEventListener('click', () => {
+  if (!savedData) return;
+  const blob = new Blob([JSON.stringify(savedData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts2 = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  a.href = url;
+  const fwTag = String(savedData?.meta?.firmware || radioIdent?.fw || '').replace(/[^\w.]+/g, '').replace(/QMX$/i, '');
+  a.download = `qmx-backup-${fwTag ? fwTag + '-' : ''}${ts2}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Backup saved to file');
+});
+
+btnLoadView.addEventListener('click', () => {
+  const editedCount = dataView.querySelectorAll('.val-edit.edited').length;
+  if (editedCount && !confirm(`You have ${editedCount} unsaved edited value(s) in the Data tab.\n\nLoading a file will discard them and replace the table.\n\nContinue?`)) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = async () => {
+    const file = inp.files[0];
+    if (!file) return;
+    showLoading(`Loading ${file.name}…`);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      savedData = data;
+      renderData(data);
+      jsonArea.value = JSON.stringify(data, null, 2);
+      btnSave.disabled = false;
+      await hideLoading();
+      switchTab('data');
+      toast('Loaded: ' + file.name);
+    } catch(e) {
+      await hideLoading();
+      toast('Invalid JSON: ' + e.message, true);
+    }
+  };
+  inp.click();
+});
+
+// ── Manual send ──
+btnSend.addEventListener('click', sendManual);
+manualCmd.addEventListener('keydown', e => { if (e.key === 'Enter') sendManual(); });
+
+async function sendManual() {
+  const cmd = manualCmd.value.trim();
+  if (!cmd || busy) return;
+  try {
+    const resp = await cat(cmd.endsWith(';') ? cmd : cmd + ';', true, 300);
+    if (!resp) log('(no response)', 'log-info');
+  } catch(e) {
+    logErr(e.message);
+  }
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
+}
+
+// ═══════════════════════════════════════════════════
+// Firmware update (V24)
+// The QMX bootloader appears as a USB flash drive; the firmware file is
+// copied onto it. Here: unzip in the browser (no library), then write via
+// the File System Access API, or save the file for a manual copy.
+// ═══════════════════════════════════════════════════
+const fwModal   = document.getElementById('fw-modal');
+const fwFileIn  = document.getElementById('fw-file');
+const fwInfo    = document.getElementById('fw-file-info');
+const fwEntryRow= document.getElementById('fw-entry-row');
+const fwEntrySel= document.getElementById('fw-entry');
+const fwWriteBtn= document.getElementById('fw-write');
+const fwDlBtn   = document.getElementById('fw-download');
+const fwWriteSt = document.getElementById('fw-write-state');
+let fwZipEntries = null;   // entries of a chosen zip
+let fwZipBuf     = null;
+let fwPayload    = null;   // { name, bytes:Uint8Array }
+
+function fwVersionOf(s) {
+  const m = String(s || '').match(/(\d+)[_.](\d+)[_.](\d+)/);
+  return m ? `${m[1]}_${m[2].padStart(2,'0')}_${m[3].padStart(3,'0')}` : null;
+}
+function fmtBytes(n) { return n >= 1024 ? (n/1024).toFixed(1) + ' kB' : n + ' B'; }
+
+function fwRefreshBackupState() {
+  const el = document.getElementById('fw-backup-state');
+  const fw = radioIdent?.fw ? `Radio firmware: <b>${escHtml(radioIdent.fw)}</b>` : 'Radio firmware: unknown (not connected)';
+  const bk = savedData?.meta?.timestamp
+    ? `Backup in memory: <b>${escHtml(savedData.meta.timestamp)}</b> (fw ${escHtml(savedData.meta.firmware || '?')}). Make sure it's saved as JSON.`
+    : '<span class="fw-warn">No backup in memory yet.</span>';
+  el.innerHTML = fw + '<br>' + bk;
+}
+
+document.getElementById('btn-fw').addEventListener('click', () => {
+  fwRefreshBackupState();
+  document.getElementById('fw-release').disabled = !port;
+  document.getElementById('fw-auto').disabled = !radioConnected || busy || fwAutoRunning;
+  document.getElementById('fw-term').disabled = !port || busy || fwTermRunning;
+  if (!('showDirectoryPicker' in window)) {
+    fwWriteSt.innerHTML = '<span class="fw-warn">This browser cannot write to folders. Use "Save file for manual copy".</span>';
+  }
+  fwModal.classList.add('visible');
+  document.getElementById('fw-box').scrollTop = 0;      // always open at the top (V29)
+});
+document.getElementById('fw-close').addEventListener('click', () => fwModal.classList.remove('visible'));
+fwModal.addEventListener('click', e => { if (e.target === fwModal) fwModal.classList.remove('visible'); });
+
+// ── Minimal ZIP reader (stored + deflate) ──
+function zipList(buf) {
+  const dv = new DataView(buf);
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('Not a valid zip file');
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const dec = new TextDecoder();
+  const out = [];
+  for (let k = 0; k < count; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('Corrupt zip directory');
+    const method = dv.getUint16(p + 10, true);
+    const csize  = dv.getUint32(p + 20, true);
+    const usize  = dv.getUint32(p + 24, true);
+    const nlen   = dv.getUint16(p + 28, true);
+    const xlen   = dv.getUint16(p + 30, true);
+    const clen   = dv.getUint16(p + 32, true);
+    const local  = dv.getUint32(p + 42, true);
+    const name   = dec.decode(new Uint8Array(buf, p + 46, nlen));
+    out.push({ name, method, csize, usize, local });
+    p += 46 + nlen + xlen + clen;
+  }
+  return out.filter(e => !e.name.endsWith('/') && !e.name.startsWith('__MACOSX/') && !/(^|\/)\._/.test(e.name));
+}
+async function zipExtract(buf, e) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(e.local, true) !== 0x04034b50) throw new Error('Corrupt zip entry');
+  const start = e.local + 30 + dv.getUint16(e.local + 26, true) + dv.getUint16(e.local + 28, true);
+  const raw = new Uint8Array(buf, start, e.csize);
+  if (e.method === 0) return raw.slice();
+  if (e.method !== 8) throw new Error('Unsupported zip compression method ' + e.method);
+  const ds = new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  const bytes = new Uint8Array(await new Response(ds).arrayBuffer());
+  if (bytes.length !== e.usize) throw new Error('Unzipped size mismatch');
+  return bytes;
+}
+
+function fwSetPayload(name, bytes) {
+  fwPayload = { name: name.split('/').pop(), bytes };
+  const v = fwVersionOf(fwPayload.name);
+  let html = `Firmware file: <b>${escHtml(fwPayload.name)}</b> · ${fmtBytes(bytes.length)}`;
+  if (v) html += ` · version <b>${v}</b>`;
+  if (v && radioIdent?.fw) {
+    const cur = fwVersionOf(radioIdent.fw);
+    if (cur && v === cur) html += '<br><span class="fw-warn">This is the same version as the radio already has.</span>';
+    else if (cur && v < cur) html += `<br><span class="fw-warn">This is OLDER than the radio's firmware (${cur}). Is that what you want?</span>`;
+  }
+  if (bytes.length < 1024) html += '<br><span class="fw-err">The file is very small. Is this really the firmware?</span>';
+  fwInfo.innerHTML = html;
+  fwWriteBtn.disabled = !('showDirectoryPicker' in window);
+  fwDlBtn.disabled = false;
+  log(`Firmware file ready: ${fwPayload.name} (${bytes.length} bytes${v ? ', version ' + v : ''})`);
+  if (!fwAskOn()) setTimeout(fwStreamlined, 0);
+}
+
+document.getElementById('fw-pick').addEventListener('click', () => { fwFileIn.value = ''; fwFileIn.click(); });
+fwFileIn.addEventListener('change', async () => {
+  const file = fwFileIn.files[0];
+  if (!file) return;
+  fwPayload = null; fwWriteBtn.disabled = true; fwDlBtn.disabled = true;
+  fwEntryRow.style.display = 'none'; fwWriteSt.textContent = '';
+  try {
+    const buf = await file.arrayBuffer();
+    const isZip = buf.byteLength > 4 && new DataView(buf).getUint32(0, true) === 0x04034b50;
+    if (!isZip) { fwSetPayload(file.name, new Uint8Array(buf)); return; }
+    fwZipBuf = buf;
+    fwZipEntries = zipList(buf);
+    if (!fwZipEntries.length) throw new Error('The zip is empty');
+    // Leave out documents; prefer what's left
+    const docRe = /\.(txt|pdf|html?|md|rtf|docx?|jpe?g|png)$/i;
+    const cands = fwZipEntries.filter(e => !docRe.test(e.name));
+    const list = cands.length ? cands : fwZipEntries;
+    fwEntrySel.innerHTML = fwZipEntries.map((e, i) =>
+      `<option value="${i}" ${e === list[0] ? 'selected' : ''}>${escHtml(e.name)} (${fmtBytes(e.usize)})</option>`).join('');
+    fwEntryRow.style.display = fwZipEntries.length > 1 ? 'block' : 'none';
+    log(`Zip ${file.name}: ${fwZipEntries.length} file(s) — ${fwZipEntries.map(e => e.name).join(', ')}`);
+    await fwUseEntry(fwZipEntries.indexOf(list[0]));
+    if (cands.length > 1) fwInfo.innerHTML += '<br><span class="fw-warn">The zip holds several possible firmware files. Check the selection above.</span>';
+  } catch (e) {
+    fwInfo.innerHTML = `<span class="fw-err">Could not read the file: ${escHtml(e.message)}</span>`;
+    logErr('Firmware file: ' + e.message);
+  }
+});
+async function fwUseEntry(i) {
+  const e = fwZipEntries[i];
+  fwSetPayload(e.name, await zipExtract(fwZipBuf, e));
+}
+fwEntrySel.addEventListener('change', async () => {
+  try { await fwUseEntry(parseInt(fwEntrySel.value)); }
+  catch (e) { fwInfo.innerHTML = `<span class="fw-err">${escHtml(e.message)}</span>`; }
+});
+
+document.getElementById('fw-release').addEventListener('click', async () => {
+  if (!port) return;
+  await closePort();
+  setConnected('disconnected');
+  document.getElementById('fw-release').disabled = true;
+  log('Serial port released for the firmware update');
+  toast('Serial port released. Now start Update firmware on the QMX.');
+});
+
+fwWriteBtn.addEventListener('click', async () => {
+  if (!fwPayload) return;
+  let dir;
+  try {
+    dir = await window.showDirectoryPicker({ id: 'qmx-drive', mode: 'readwrite' });
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    fwWriteSt.innerHTML = `<span class="fw-err">Can't open that folder (${escHtml(e.message)}). Use "Save file for manual copy".</span>`;
+    logErr('Folder picker: ' + e.message);
+    return;
+  }
+  // Show what's on the chosen drive, so a wrong folder is easy to spot
+  const names = [];
+  try { for await (const [n] of dir.entries()) { names.push(n); if (names.length > 30) break; } } catch (e) {}
+  const looksLikeQmx = names.length <= 10;
+  const msg = `Write ${fwPayload.name} (${fmtBytes(fwPayload.bytes.length)}) to the folder "${dir.name}"?\n\n` +
+    `It contains: ${names.length ? names.slice(0, 10).join(', ') + (names.length > 10 ? ', …' : '') : '(empty)'}\n\n` +
+    (looksLikeQmx ? '' : '⚠ This folder has a lot of files. It may NOT be the QMX drive!\n\n') +
+    'Do not unplug or power off the QMX during the update.';
+  if (!confirm(msg)) return;
+
+  fwWriteBtn.disabled = true;
+  fwWriteSt.textContent = 'Writing…';
+  log(`Writing firmware ${fwPayload.name} to drive "${dir.name}"…`);
+  let wrote = false;
+  try {
+    const fh = await dir.getFileHandle(fwPayload.name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(fwPayload.bytes);
+    wrote = true;            // all data handed to the browser
+    await w.close();         // the browser moves its temp file into place here
+    fwWriteSt.innerHTML = '<b>Done.</b> The QMX should now restart with the new firmware. Reconnect to check the version.';
+    log('Firmware written. The QMX should restart; reconnect to check the version.');
+    toast('Firmware written to QMX');
+  } catch (e) {
+    if (wrote) {
+      // The bootloader often reboots as soon as it has the image, which can make the final step fail
+      fwWriteSt.innerHTML = `<span class="fw-warn">The data was sent, but the last step reported "${escHtml(e.message)}". ` +
+        'This can happen when the QMX restarts straight away. Check whether the QMX restarted. Reconnect and check the version, or copy the file by hand if not.</span>';
+      log('Firmware write: data sent, final step failed (' + e.message + '). Check the radio.', 'log-info');
+    } else {
+      fwWriteSt.innerHTML = `<span class="fw-err">Write failed: ${escHtml(e.message)}. Use "Save file for manual copy".</span>`;
+      logErr('Firmware write failed: ' + e.message);
+    }
+  } finally {
+    fwWriteBtn.disabled = false;
+  }
+});
+
+// ── Enter firmware update mode over CAT (experimental, V24) ──
+// Not documented by QRP Labs: the menu item is found by MM discovery and a
+// Set is sent to it. Success = the QMX's USB serial port disappears (bootloader).
+let fwAutoRunning = false;
+let fwAutoCancel  = false;
+const fwAutoBtn   = document.getElementById('fw-auto');
+const fwAutoStop  = document.getElementById('fw-auto-cancel');
+const fwAutoSt    = document.getElementById('fw-auto-state');
+const FW_ITEM_RE  = /update\s*firmware|firmware\s*update|bootloader/i;
+
+function fwAutoMsg(html, cls = '') { fwAutoSt.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; }
+
+// Walk the menu tree (names only, no values) looking for the firmware item
+async function fwFindMenuItem() {
+  const queue = [{ path: '', named: '', depth: 0 }];
+  let seen = 0;
+  while (queue.length) {
+    const { path: prefix, named, depth } = queue.shift();
+    for (let idx = 0; idx < 200; idx++) {
+      if (fwAutoCancel) return null;
+      const path = prefix === '' ? String(idx) : `${prefix}|${idx}`;
+      const item = await mmDiscover(path);
+      if (!item) break;
+      seen++;
+      const namedPath = named === '' ? item.name : `${named}|${item.name}`;
+      if (seen % 10 === 0) fwAutoMsg(`Searching the menu… (${seen} items checked)`);
+      if (FW_ITEM_RE.test(item.name) && item.type !== 0) return { path, namedPath, type: item.type };
+      if (item.type === 0 && item.cols === null && depth < 3) queue.push({ path, named: namedPath, depth: depth + 1 });
+    }
+  }
+  return null;
+}
+
+// Resolves true when the QMX's serial port disappears
+function fwPortGone() {
+  if (!port || !port.readable) return Promise.resolve(true);
+  return cat('ID;', true, 400).then(r => !r, () => true);   // no reply / write error ⇒ gone
+}
+
+fwAutoBtn.addEventListener('click', async () => {
+  if (!port || !radioConnected || busy || fwAutoRunning) return;
+  fwAutoRunning = true; fwAutoCancel = false; busy = true;
+  fwAutoBtn.disabled = true;
+  const myPort = port;
+  let unplugged = false;
+  const onDisc = e => { if (e.target === myPort) unplugged = true; };
+  navigator.serial.addEventListener('disconnect', onDisc);
+  try {
+    logSection('Firmware update mode via CAT — experimental');
+    fwAutoMsg('Searching the menu for "Update firmware"…');
+    const item = await fwFindMenuItem();
+    if (fwAutoCancel) { fwAutoMsg('Stopped.'); return; }
+    if (!item) {
+      fwAutoMsg('No "Update firmware" item found in the CAT menu on this firmware. Use the manual steps below.', 'fw-warn');
+      log('Firmware item not found in MM menu tree — use the radio menu', 'log-info');
+      return;
+    }
+    log(`Found "${item.namedPath}" at MM path ${item.path} (type ${item.type})`);
+    if (!confirm(`Found "${item.namedPath}" (MM path ${item.path}).\n\n` +
+                 `Send MM${item.path}=1; to start firmware update mode?\n\n` +
+                 `This is not documented by QRP Labs. At worst the QMX rejects it. ` +
+                 `If the QMX shows "Sure? Click Tune", press TUNE.`)) { fwAutoMsg('Cancelled.'); return; }
+
+    let reply = '';
+    try { reply = await cat(`MM${item.path}=1;`, true, 400); }
+    catch (e) {
+      if (e.catError) {
+        fwAutoMsg('The QMX rejected the command (?;). Starting firmware update isn\'t possible over CAT on this firmware. Use the manual steps below.', 'fw-warn');
+        log('MM set on firmware item rejected (?;) — not possible over CAT', 'log-info');
+        return;
+      }
+      unplugged = true;   // write/read failed — port probably went away
+    }
+    if (reply) log('Reply: ' + reply, 'log-info');
+
+    // Watch for the port to disappear: up to 30 s, so there's time to press TUNE
+    fwAutoStop.style.display = '';
+    let misses = 0;   // two silent ID probes in a row ⇒ the port is gone
+    for (let t = 0; t < 30 && !unplugged && !fwAutoCancel; t++) {
+      fwAutoMsg(t < 2 ? 'Command sent — waiting for the QMX to restart…'
+        : `If the QMX shows "Sure? Click Tune", press TUNE now. Waiting… ${30 - t} s`);
+      await delay(1000);
+      if (unplugged) break;
+      misses = (await fwPortGone()) ? misses + 1 : 0;
+      if (misses >= 2 || !port?.readable) unplugged = true;
+    }
+
+    if (unplugged) {
+      await closePort();
+      setConnected('disconnected');
+      document.getElementById('fw-release').disabled = true;
+      fwAutoMsg('<b>The QMX is in firmware update mode</b>, and the serial port was released. Continue with step 4.');
+      log('QMX left CAT mode (port gone) — serial port released. Continue with step 4.');
+      toast('QMX in firmware update mode — now write the firmware');
+      fwWriteBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      fwAutoMsg(fwAutoCancel ? 'Stopped. The QMX is still in normal mode.'
+        : 'The QMX accepted the command but did not restart. Starting the update probably isn\'t possible over CAT. Use the manual steps below.', 'fw-warn');
+      log('QMX still answering after MM set — firmware mode not entered over CAT', 'log-info');
+    }
+  } catch (e) {
+    fwAutoMsg('Error: ' + escHtml(e.message) + '. Use the manual steps below.', 'fw-err');
+    logErr('Firmware update mode via CAT: ' + e.message);
+  } finally {
+    navigator.serial.removeEventListener('disconnect', onDisc);
+    fwAutoStop.style.display = 'none';
+    fwAutoRunning = false; busy = false;
+    fwAutoBtn.disabled = !radioConnected;
+  }
+});
+fwAutoStop.addEventListener('click', () => { fwAutoCancel = true; });
+
+fwDlBtn.addEventListener('click', async () => {
+  if (!fwPayload) return;
+  const blob = new Blob([fwPayload.bytes], { type: 'application/octet-stream' });
+  if ('showSaveFilePicker' in window) {
+    try {
+      const fh = await window.showSaveFilePicker({ suggestedName: fwPayload.name, id: 'qmx-drive' });
+      const w = await fh.createWritable(); await w.write(blob); await w.close();
+      fwWriteSt.textContent = `Saved ${fwPayload.name}. Copy it onto the QMX drive if you didn't save it straight there.`;
+      log('Firmware file saved: ' + fwPayload.name);
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      // fall through to a normal download
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = fwPayload.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  fwWriteSt.textContent = `Downloaded ${fwPayload.name}. Copy it onto the QMX drive.`;
+});
+
+// ═══════════════════════════════════════════════════
+// QMX terminal menu driver (V25)
+// Reads the QMX's VT100 terminal screens and steers the highlight by the
+// NAMES on screen, never by counting key presses: every QMX menu remembers
+// where it was left, and the layout changes between firmware versions.
+// ═══════════════════════════════════════════════════
+const TERM_ROWS = 50, TERM_COLS = 132;
+const TERM_KEYS = { up: '\x1b[A', down: '\x1b[B', enter: '\r', esc: '\x1b' };
+// Never press Enter on anything that matches this
+const TERM_DANGER_RE = /factory|reset|erase/i;
+
+class TermScreen {
+  constructor() { this.clear(); this.pending = ''; }
+  clear() {
+    this.ch = Array.from({ length: TERM_ROWS }, () => Array(TERM_COLS).fill(' '));
+    this.hl = Array.from({ length: TERM_ROWS }, () => Array(TERM_COLS).fill(false));
+    this.r = 0; this.c = 0; this.rev = false; this.bg = false;
+  }
+  get attrHL() { return this.rev || this.bg; }
+  eraseCells(r, c0, c1) {
+    for (let c = c0; c < c1; c++) { this.ch[r][c] = ' '; this.hl[r][c] = false; }
+  }
+  sgr(params) {
+    const p = params === '' ? [0] : params.split(';').map(x => parseInt(x || '0', 10));
+    for (let i = 0; i < p.length; i++) {
+      const v = p[i];
+      if (v === 0) { this.rev = false; this.bg = false; }
+      else if (v === 7) this.rev = true;
+      else if (v === 27) this.rev = false;
+      else if (v === 40 || v === 49) this.bg = false;           // black / default background
+      else if ((v >= 41 && v <= 47) || (v >= 100 && v <= 107)) this.bg = true;
+      else if (v === 48) {                                       // 48;5;n or 48;2;r;g;b
+        if (p[i + 1] === 5) { this.bg = p[i + 2] !== 0 && p[i + 2] !== 16; i += 2; }
+        else if (p[i + 1] === 2) { this.bg = (p[i + 2] | p[i + 3] | p[i + 4]) !== 0; i += 4; }
+      }
+    }
+  }
+  csi(params, final) {
+    const n = (k, d = 1) => { const v = parseInt((params.split(';')[k] || ''), 10); return isNaN(v) || v === 0 ? d : v; };
+    const clampR = v => Math.max(0, Math.min(TERM_ROWS - 1, v));
+    const clampC = v => Math.max(0, Math.min(TERM_COLS - 1, v));
+    if (params.startsWith('?')) return;                          // mode set/reset, cursor show/hide
+    switch (final) {
+      case 'H': case 'f': this.r = clampR(n(0) - 1); this.c = clampC(n(1) - 1); break;
+      case 'A': this.r = clampR(this.r - n(0)); break;
+      case 'B': this.r = clampR(this.r + n(0)); break;
+      case 'C': this.c = clampC(this.c + n(0)); break;
+      case 'D': this.c = clampC(this.c - n(0)); break;
+      case 'G': this.c = clampC(n(0) - 1); break;
+      case 'd': this.r = clampR(n(0) - 1); break;
+      case 'J': {
+        const m = parseInt(params || '0', 10) || 0;
+        if (m === 2 || m === 3) { const r = this.r, c = this.c; this.clear(); this.r = r; this.c = c; }
+        else if (m === 0) { this.eraseCells(this.r, this.c, TERM_COLS); for (let r = this.r + 1; r < TERM_ROWS; r++) this.eraseCells(r, 0, TERM_COLS); }
+        else if (m === 1) { for (let r = 0; r < this.r; r++) this.eraseCells(r, 0, TERM_COLS); this.eraseCells(this.r, 0, this.c + 1); }
+        break;
+      }
+      case 'K': {
+        const m = parseInt(params || '0', 10) || 0;
+        if (m === 0) this.eraseCells(this.r, this.c, TERM_COLS);
+        else if (m === 1) this.eraseCells(this.r, 0, this.c + 1);
+        else this.eraseCells(this.r, 0, TERM_COLS);
+        break;
+      }
+      case 'm': this.sgr(params); break;
+      default: break;
+    }
+  }
+  feed(text) {
+    const s = this.pending + text;
+    this.pending = '';
+    let i = 0;
+    while (i < s.length) {
+      const ch = s[i];
+      if (ch === '\x1b') {
+        if (i + 1 >= s.length) { this.pending = s.slice(i); return; }
+        const nx = s[i + 1];
+        if (nx === '[') {
+          let j = i + 2;
+          while (j < s.length && !/[@-~]/.test(s[j])) j++;
+          if (j >= s.length) { this.pending = s.slice(i); return; }
+          this.csi(s.slice(i + 2, j), s[j]);
+          i = j + 1;
+        } else if (nx === '(' || nx === ')') {
+          if (i + 2 >= s.length) { this.pending = s.slice(i); return; }
+          i += 3;                                                // charset select
+        } else { i += 2; }                                       // ESC 7, ESC 8, ESC c …
+        continue;
+      }
+      if (ch === '\r') { this.c = 0; i++; continue; }
+      if (ch === '\n') { this.r = Math.min(TERM_ROWS - 1, this.r + 1); i++; continue; }
+      if (ch === '\b') { this.c = Math.max(0, this.c - 1); i++; continue; }
+      const code = ch.charCodeAt(0);
+      if (code < 0x20 || code === 0x7f) { i++; continue; }
+      if (this.c < TERM_COLS) { this.ch[this.r][this.c] = ch; this.hl[this.r][this.c] = this.attrHL; }
+      this.c = Math.min(TERM_COLS - 1, this.c + 1);
+      i++;
+    }
+  }
+  rowText(r) { return this.ch[r].join('').replace(/\s+$/, ''); }
+  text() {
+    const rows = [];
+    for (let r = 0; r < TERM_ROWS; r++) rows.push(this.rowText(r));
+    while (rows.length && rows[rows.length - 1] === '') rows.pop();
+    return rows.join('\n');
+  }
+}
+
+// Read the menu structure off the screen.
+// Item rows hold "|" box sides; border rows hold "+---"; titles sit in border rows.
+function termWords(scr, r) {
+  const line = scr.ch[r].join('');
+  const words = [];
+  const re = /[^|+\-\s](?:[^|+]*[^|+\-\s])?/g;
+  let m;
+  while ((m = re.exec(line))) {
+    let lit = false;
+    for (let c = m.index; c < m.index + m[0].length; c++) if (line[c] !== ' ' && scr.hl[r][c]) { lit = true; break; }
+    words.push({ text: m[0].trim(), col: m.index, end: m.index + m[0].length, lit });
+  }
+  return { line, words };
+}
+function termParseMenu(scr) {
+  const titles = [];
+  const isBorder = line => /\+-|-\+|--/.test(line);
+  for (let r = 0; r < TERM_ROWS; r++) {
+    const { line, words } = termWords(scr, r);
+    if (isBorder(line)) for (const w of words) titles.push({ row: r, col: w.col, text: w.text, lit: w.lit });
+  }
+  // The innermost menu is the deepest title. Its box's left edge is the "+" before the title.
+  const inner = titles.length ? titles.reduce((a, b) => (b.row > a.row || (b.row === a.row && b.col > a.col)) ? b : a) : null;
+  const items = [];
+  if (inner) {
+    const tline = scr.ch[inner.row].join('');
+    const left = tline.lastIndexOf('+', inner.col);
+    for (let r = inner.row + 1; r < TERM_ROWS; r++) {
+      const { line, words } = termWords(scr, r);
+      if (line[left] === '+' || (isBorder(line) && line.slice(left, left + 3).includes('-'))) break;   // bottom of the box
+      const w = words.find(w => w.col > left);
+      if (w && line[left] === '|') items.push({ row: r, col: w.col, text: w.text, lit: w.lit });
+    }
+  }
+  const lit = items.filter(i => i.lit);
+  return { title: inner ? inner.text : null, titles: titles.map(t => t.text), items, highlighted: lit.length === 1 ? lit[0] : null, litCount: lit.length };
+}
+
+function termDescribe(menu) {
+  const list = menu.items.map(i => (i.lit ? '[' + i.text + ']' : i.text)).join(' · ');
+  return `menu "${menu.title || '?'}": ${list || '(no items)'}`;
+}
+
+// ── Driver: io = { send(str), settle(ms) → Promise, screen: TermScreen, log(msg, cls), cancelled() } ──
+async function termKey(io, key, label) {
+  io.log(`TERM ▸ ${label}`, 'log-tx');
+  await io.send(TERM_KEYS[key]);
+  await io.settle(key === 'esc' ? 500 : 250);
+  return termParseMenu(io.screen);
+}
+
+const termLabel = re => /firmware/i.test(re.source) ? '"Update firmware"' : '"' + re.source.replace(/[\^$]/g, '').replace(/\\s\*/g, ' ') + '"';
+// Move the highlight onto the item matching targetRe. Never presses Enter.
+async function termHighlight(io, targetRe) {
+  let menu = termParseMenu(io.screen);
+  const target = () => menu.items.findIndex(i => targetRe.test(i.text));
+  if (target() < 0) throw new Error(`${termLabel(targetRe)} is not in ${termDescribe(menu)}`);
+  let lastRow = null, stuck = 0;
+  for (let step = 0; step < 40; step++) {
+    if (io.cancelled()) throw new Error('Stopped');
+    if (!menu.highlighted) throw new Error(`can't tell which line is highlighted (${menu.litCount} lit) in ${termDescribe(menu)}`);
+    const t = target();
+    if (t < 0) throw new Error(`${termLabel(targetRe)} disappeared from ${termDescribe(menu)}`);
+    const h = menu.items.indexOf(menu.highlighted);
+    if (h === t) return menu;
+    if (menu.highlighted.row === lastRow) { if (++stuck >= 2) throw new Error(`the highlight doesn't move (${termDescribe(menu)})`); }
+    else stuck = 0;
+    lastRow = menu.highlighted.row;
+    menu = await termKey(io, t > h ? 'down' : 'up', `${t > h ? 'Down' : 'Up'} (on "${menu.highlighted.text}")`);
+  }
+  throw new Error('gave up after 40 steps');
+}
+
+// Press Enter on the highlighted item — only if it is the one we meant and is not dangerous
+async function termEnterOn(io, targetRe, label) {
+  const menu = termParseMenu(io.screen);
+  const h = menu.highlighted;
+  if (!h || !targetRe.test(h.text)) throw new Error(`refusing Enter: highlight is on "${h ? h.text : '?'}", not ${label}`);
+  if (TERM_DANGER_RE.test(h.text)) throw new Error(`refusing Enter on "${h.text}"`);
+  return termKey(io, 'enter', `Enter on "${h.text}"`);
+}
+
+// Back out to the Main menu with Escape (stops at the Main menu, so it never exits the terminal)
+async function termToMain(io) {
+  let menu = termParseMenu(io.screen);
+  for (let k = 0; k < 5; k++) {
+    if (menu.title && /^main\s*menu$/i.test(menu.title)) return menu;
+    menu = await termKey(io, 'esc', `Escape (in "${menu.title || '?'}")`);
+  }
+  if (menu.title && /^main\s*menu$/i.test(menu.title)) return menu;
+  throw new Error(`could not get back to the Main menu (${termDescribe(menu)})`);
+}
+
+// Open the terminal and walk to "Update firmware" with the highlight on it. Does NOT press Enter on it.
+async function termGoToUpdateFirmware(io) {
+  io.log('TERM ▸ Enter (open terminal menu)', 'log-tx');
+  await io.send(TERM_KEYS.enter);
+  await io.settle(1500);
+  let menu = termParseMenu(io.screen);
+  if (!menu.items.length) {                     // first Enter may only start the terminal
+    menu = await termKey(io, 'enter', 'Enter (show menu)');
+    await io.settle(800);
+    menu = termParseMenu(io.screen);
+  }
+  if (!menu.items.length) throw new Error('no terminal menu appeared');
+  io.log('Screen: ' + termDescribe(menu));
+  menu = await termToMain(io);
+  io.log('Screen: ' + termDescribe(menu));
+
+  await termHighlight(io, /^system$/i);
+  menu = await termEnterOn(io, /^system$/i, '"System"');
+  io.log('Screen: ' + termDescribe(menu));
+  if (!menu.title || !/^system$/i.test(menu.title)) throw new Error(`expected the System menu, got ${termDescribe(menu)}`);
+
+  menu = await termHighlight(io, /update.*firmware|firmware.*update/i);
+  if (TERM_DANGER_RE.test(menu.highlighted.text)) throw new Error(`"${menu.highlighted.text}" looks dangerous`);
+  io.log('Screen: ' + termDescribe(menu));
+  return menu;
+}
+
+// Leave the terminal cleanly via the "Exit terminal" item, so CAT works again
+async function termExit(io) {
+  try {
+    await termToMain(io);
+    await termHighlight(io, /^exit\s*terminal$/i);
+    await termEnterOn(io, /^exit\s*terminal$/i, '"Exit terminal"');
+    return true;
+  } catch (e) {
+    io.log('Could not leave the terminal by the menu: ' + e.message, 'log-err');
+    return false;
+  }
+}
+
+// (module.exports only for the Node test harness)
+if (typeof module !== 'undefined') module.exports = { TermScreen, termParseMenu, termDescribe, termGoToUpdateFirmware, termEnterOn, termToMain, termExit, termHighlight, TERM_DANGER_RE };
+
+// ── Enter firmware update mode via the terminal menu (V25) ──
+let fwTermRunning = false;
+let fwTermCancel  = false;
+let fwTermCapture = [];         // { t, dir, text } — everything sent and received
+const fwTermBtn  = document.getElementById('fw-term');
+const fwTermStop = document.getElementById('fw-term-cancel');
+const fwTermSave = document.getElementById('fw-term-save');
+const fwTermSt   = document.getElementById('fw-term-state');
+function fwTermMsg(html, cls = '') { fwTermSt.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; }
+
+function makeTermIo() {
+  const screen = new TermScreen();
+  let lastRx = performance.now();
+  const t0 = performance.now();
+  termTap = chunk => {
+    lastRx = performance.now();
+    fwTermCapture.push({ t: Math.round(lastRx - t0), dir: 'rx', text: chunk });
+    screen.feed(chunk);
+  };
+  return {
+    screen,
+    async send(str) {
+      if (!port || !port.writable) throw new Error('serial port closed');
+      fwTermCapture.push({ t: Math.round(performance.now() - t0), dir: 'tx', text: str });
+      const w = port.writable.getWriter();
+      try { await w.write(new TextEncoder().encode(str)); } finally { w.releaseLock(); }
+    },
+    // Wait until the QMX has been quiet for 120 ms (at least `min` ms, at most min+2 s)
+    async settle(min = 250) {
+      const start = performance.now();
+      await delay(Math.min(min, 120));
+      while (performance.now() - start < min + 2000) {
+        if (performance.now() - lastRx >= 120 && performance.now() - start >= min) return;
+        await delay(30);
+      }
+    },
+    log: (m, cls = 'log-info') => log(m, cls),
+    cancelled: () => fwTermCancel,
+  };
+}
+
+fwTermSave.addEventListener('click', () => {
+  const lines = fwTermCapture.map(e => `${String(e.t).padStart(6)} ms ${e.dir === 'tx' ? 'TX' : 'RX'} ${JSON.stringify(e.text)}`);
+  const blob = new Blob([`QMX terminal capture — ${new Date().toISOString()}\nRadio firmware: ${radioIdent?.fw || '?'}\n\n` + lines.join('\n') + '\n'], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `qmx-terminal-capture-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.txt`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+fwTermStop.addEventListener('click', () => { fwTermCancel = true; });
+
+fwTermBtn.addEventListener('click', () => runTermUpdate(fwAskOn()));
+
+// ask=true: confirm each step. ask=false (streamlined): no pop-ups; every safety check still applies.
+// Returns true when the QMX dropped its port (update mode).
+async function runTermUpdate(ask) {
+  if (!port || busy || fwTermRunning) return false;
+  if (ask && !confirm('The tool will open the QMX terminal menu and move to System → Update firmware.\n\n' +
+               'It reads the menu names on each screen and never presses Enter on Factory reset. ' +
+               'It will ask you once more before pressing Enter on "Update firmware".\n\nContinue?')) return false;
+  fwTermRunning = true; fwTermCancel = false; busy = true;
+  fwTermBtn.disabled = true; fwTermStop.style.display = '';
+  fwTermCapture = [];
+  const myPort = port;
+  let unplugged = false;
+  const onDisc = e => { if (e.target === myPort) unplugged = true; };
+  navigator.serial.addEventListener('disconnect', onDisc);
+  const io = makeTermIo();
+  let inTerminal = true;
+  try {
+    logSection('Firmware update mode via terminal menu (V28' + (ask ? '' : ', streamlined') + ')');
+    fwTermMsg('Opening the terminal menu…');
+    rxBuf = '';
+    const menu = await termGoToUpdateFirmware(io);
+    fwTermMsg(`Highlight is on <b>${escHtml(menu.highlighted.text)}</b> in the <b>${escHtml(menu.title)}</b> menu.`);
+
+    if (ask && !confirm(`The highlight is on "${menu.highlighted.text}" in the ${menu.title} menu.\n\n` +
+                 `Press Enter on it now to start the firmware update?\n\n` +
+                 `OK = press Enter. The QMX then shows its own firmware-update question, and the tool asks you before answering it.\n` +
+                 `Cancel = test run only: the tool backs out and leaves the terminal.`)) {
+      fwTermMsg('Test run finished: the tool found "Update firmware" and backed out. Leaving the terminal…');
+      inTerminal = !(await termExit(io));
+      fwTermMsg(inTerminal
+        ? 'Test run OK, but the tool could not leave the terminal by its menu. Press Escape in a terminal or reconnect.'
+        : '<b>Test run OK.</b> The tool reached "Update firmware" by name, pressed nothing on it, and left the terminal.', inTerminal ? 'fw-warn' : '');
+      log('Terminal test run complete — Update firmware found, not pressed');
+      return false;
+    }
+
+    const before = io.screen.text().split('\n');
+    await termEnterOn(io, /update.*firmware|firmware.*update/i, '"Update firmware"');
+    await io.settle(1200);
+    // Only the lines that changed are the QMX's answer
+    const after = io.screen.text().split('\n').filter((l, i) => l.trim() && l !== before[i]).join('\n');
+    log('Screen after Enter: ' + (after ? after.split('\n').map(l => l.trim()).join(' / ') : '(no change)'));
+
+    // Whatever came up must be about the firmware update, never a reset
+    if (TERM_DANGER_RE.test(after)) {
+      await io.send('\x1b'); await io.settle(600);
+      throw new Error('the screen mentions "factory/reset" — pressed Escape and stopped');
+    }
+    const yn = after.split('\n').reverse().find(l => /\by\s*\/\s*n\b|yes\s*\/\s*no|\(y\)|press\s+y\b/i.test(l));
+    if (yn) {
+      if (!/firmware|update|boot/i.test(after)) { await io.send('\x1b'); await io.settle(600); throw new Error(`unexpected question "${yn.trim()}" — pressed Escape and stopped`); }
+      const said = after.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+      if (!ask) log('QMX says: ' + said.replace(/\n/g, ' / '));
+      if (ask && !confirm(`The QMX says:\n\n${said}\n\nOK = press Y (start the update).\nCancel = any other key (no update).`)) { await io.send('\x1b'); await io.settle(600); throw new Error('you chose not to proceed — the QMX was told to cancel'); }
+      log('TERM ▸ Y (proceed with firmware update)', 'log-tx');
+      await io.send('Y');
+      await io.settle(500);
+    }
+
+    // Wait for the QMX to drop its serial port (bootloader). No CAT probes here: we're in the terminal.
+    for (let t = 0; t < 60 && !unplugged && !fwTermCancel; t++) {
+      fwTermMsg(yn ? `Y sent — waiting for the QMX to restart as a USB drive… ${60 - t} s`
+                    : `Waiting for the QMX to restart… ${60 - t} s. If its display shows "Sure? Click Tune", press TUNE.`);
+      await delay(1000);
+      if (!port || !port.readable) unplugged = true;
+    }
+    if (unplugged) {
+      inTerminal = false;
+      termTap = null;
+      await closePort();
+      setConnected('disconnected');
+      document.getElementById('fw-release').disabled = true;
+      fwTermMsg('<b>The QMX is in firmware update mode</b>, and the serial port was released.<br><b>If the QMX drive doesn\'t appear on the PC, switch the QMX off and on.</b> No TUNE press is needed on this route. Then continue with step 4.');
+      log('QMX dropped its serial port — firmware update mode. Continue with step 4.');
+      toast('QMX in firmware update mode — now write the firmware');
+      fwWriteBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      await io.send('\x1b');               // cancel the pending "Sure?" if any
+      await io.settle(500);
+      inTerminal = !(await termExit(io));
+      fwTermMsg(fwTermCancel ? 'Stopped. The QMX is still in normal mode.'
+        : 'The QMX did not restart within 60 s, so the tool backed out. Use the manual steps below.', 'fw-warn');
+      log('QMX still running after Update firmware — backed out', 'log-info');
+    }
+  } catch (e) {
+    fwTermMsg('Stopped: ' + escHtml(e.message) + '. The tool never presses Enter on a line it isn\'t sure of. Use the manual steps below, and use "Save terminal capture" to send me what the QMX showed.', 'fw-err');
+    logErr('Terminal menu: ' + e.message);
+    if (port && port.writable && !unplugged) inTerminal = !(await termExit(io));
+  } finally {
+    termTap = null;
+    rxBuf = '';
+    navigator.serial.removeEventListener('disconnect', onDisc);
+    if (inTerminal && port) log('The QMX terminal may still be open — CAT replies can be mixed with screen text until you press Escape in a terminal or reconnect.', 'log-err');
+    fwTermStop.style.display = 'none';
+    fwTermSave.disabled = !fwTermCapture.length;
+    fwTermRunning = false; busy = false;
+    fwTermBtn.disabled = !port;
+  }
+  return unplugged;
+}
+
+// ── Streamlined update (V28): choose the file and the rest runs by itself ──
+const fwAskBox  = document.getElementById('fw-ask');
+const fwAskInfo = document.getElementById('fw-ask-info');
+const fwGoRow   = document.getElementById('fw-go-row');
+const fwGoSt    = document.getElementById('fw-go-state');
+let fwGoCancel = false, fwGoRunning = false;
+function fwAskOn() { return fwAskBox.checked; }
+function fwAskShow() {
+  fwAskInfo.innerHTML = fwAskBox.checked
+    ? 'The tool asks you before each step. Untick for the streamlined update: choose the firmware file and the tool backs up, puts the QMX into update mode and tells you when to restart it.'
+    : '<b>Streamlined:</b> choosing the firmware file starts the update after a countdown with a Stop button (5 s for a newer version, 10 s for an older or the same version). The tool first reads and saves a backup, then goes through the terminal menu and answers Y. All safety checks still apply — it stops on anything unexpected.';
+}
+try { fwAskBox.checked = localStorage.getItem('qmx-fw-ask') !== '0'; } catch (e) {}
+fwAskShow();
+fwAskBox.addEventListener('change', () => { try { localStorage.setItem('qmx-fw-ask', fwAskBox.checked ? '1' : '0'); } catch (e) {} fwAskShow(); });
+document.getElementById('fw-go-stop').addEventListener('click', () => { fwGoCancel = true; fwTermCancel = true; });
+document.getElementById('fw-count-stop').addEventListener('click', () => { fwGoCancel = true; });
+function fwGoMsg(html, cls = '') { fwGoSt.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; }
+let fwGoReadStart = 0, fwProgLast = 0, fwProgHideT = null;
+// V33: shows ANY settings read in the Firmware Update window (streamlined backup or Read All Parameters)
+function fwGoProgress(pct, label) {
+  if (!fwModal.classList.contains('visible')) return;
+  const now = performance.now();
+  if (!fwGoReadStart || pct < fwProgLast - 5) fwGoReadStart = now;   // a new read started
+  fwProgLast = pct;
+  clearTimeout(fwProgHideT);
+  const secs = Math.round((now - fwGoReadStart) / 1000);
+  const t = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  document.getElementById('fw-go-prog').style.display = '';
+  document.getElementById('fw-go-bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+  document.getElementById('fw-go-label').textContent = pct >= 100
+    ? `Settings read complete · ${t}`
+    : `Reading settings: ${Math.round(pct)}% · ${label} · ${t} so far`;
+  if (pct >= 100) fwProgHideT = setTimeout(() => {
+    document.getElementById('fw-go-prog').style.display = 'none'; fwGoReadStart = 0; fwProgLast = 0;
+  }, 4000);
+}
+
+async function waitNotBusy(maxMs) {
+  const t0 = performance.now();
+  while (busy && performance.now() - t0 < maxMs) await delay(200);
+  return !busy;
+}
+
+async function fwStreamlined() {
+  if (fwGoRunning || fwAskOn() || !fwPayload) return;
+  if (!port || !radioConnected) { fwGoMsg('Connect to the QMX first, then choose the file again.', 'fw-warn'); return; }
+  if (busy) { fwGoMsg('The tool is busy. Wait, then choose the file again.', 'fw-warn'); return; }
+  const v = fwVersionOf(fwPayload.name), cur = fwVersionOf(radioIdent?.fw);
+  if (!v) { fwGoMsg('The file name has no version number, so the tool won\'t start by itself. Use the steps below.', 'fw-warn'); return; }
+  const kind = !cur ? 'update' : v > cur ? 'update' : v < cur ? 'downgrade' : 'reinstall';
+  const waitS = kind === 'update' ? 5 : 10;
+  const what = kind === 'update' ? `Updating the QMX from <b>${cur || '?'}</b> to <b>${v}</b>.`
+             : kind === 'downgrade' ? `<span class="fw-warn"><b>This is a DOWNGRADE</b> from <b>${cur}</b> to the older <b>${v}</b>.</span>`
+             : `<span class="fw-warn"><b>Re-installing the same version</b> (${v}).</span>`;
+
+  fwGoRunning = true; fwGoCancel = false; fwGoRow.style.display = '';
+  try {
+    const cBox = document.getElementById('fw-count'), cNum = document.getElementById('fw-count-num');
+    const col = kind === 'update' ? 'var(--glow)' : 'var(--warn)';
+    cBox.style.borderColor = col; cNum.style.color = col;
+    document.getElementById('fw-count-what').innerHTML = what;
+    cBox.style.display = 'flex';
+    document.getElementById('fw-box').scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+      for (let k = waitS; k > 0; k--) {
+        cNum.textContent = k;
+        fwGoMsg(`${what} Starting in ${k} s… Click STOP at the top of this window if this isn't what you want.`);
+        for (let q = 0; q < 10 && !fwGoCancel; q++) await delay(100);   // Stop reacts within 0.1 s
+        if (fwGoCancel) { fwGoMsg('Stopped. Nothing was done.'); return; }
+      }
+    } finally { cBox.style.display = 'none'; }
+
+    // 1. Backup: read everything and save it as JSON
+    fwGoMsg('<b>Step 1 of 3: reading all settings for the backup.</b> This takes a minute or two — the bar at the top of this window shows progress. Nothing is written to the radio.');
+    const before = savedData;
+    fwGoReadStart = 0; fwProgLast = 0;
+    fwGoProgress(0, 'Starting…');
+    document.getElementById('fw-box').scrollTo({ top: 0, behavior: 'smooth' });
+    btnBackup.click();
+    await delay(100);
+    if (!(await waitNotBusy(10 * 60 * 1000)) || savedData === before || !savedData?.menu_items?.length) {
+      throw new Error('the backup read did not finish');
+    }
+    if (fwGoCancel) { fwGoMsg('Stopped after the backup. Nothing else was done.'); return; }
+    btnSave.click();
+    log('Backup saved before the firmware update');
+    fwModal.classList.add('visible');      // the read switches tabs; keep this window in front
+    fwRefreshBackupState();
+
+    // 2. Terminal menu → Update firmware → Y
+    fwGoMsg('Step 2 of 3: putting the QMX into firmware update mode…');
+    const ok = await runTermUpdate(false);
+    if (!ok) throw new Error(fwGoCancel ? 'stopped' : 'the QMX did not go into update mode (see the message in step 3)');
+
+    // 3. Hand over to the user
+    fwGoMsg('<b>Step 3 of 3: switch the QMX off and on.</b> When its drive appears on the PC, click <b>Write to QMX drive…</b> below and pick that drive.');
+    toast('Switch the QMX off and on, then click Write to QMX drive…', false, true);
+    fwWriteBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {
+    fwGoMsg('Stopped: ' + escHtml(e.message) + '. Your radio is unchanged unless the message in step 3 says otherwise.', 'fw-err');
+    logErr('Streamlined update: ' + e.message);
+  } finally {
+    fwGoRunning = false; fwGoRow.style.display = 'none';
+
+  }
+}
+
+// ── Init ──
+setConnected('disconnected');
+log('QMX CAT Backup/Restore ready. Click Connect to begin.', 'log-info');
+log('Requires Chrome or Edge with Web Serial API.', 'log-info');
+</script>
+</body>
+</html>
